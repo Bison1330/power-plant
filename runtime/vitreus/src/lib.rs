@@ -1130,6 +1130,20 @@ impl pallet_energy_broker::Config for Runtime {
 }
 
 parameter_types! {
+    pub const HiveIQPalletId: PalletId = PalletId(*b"hiveiqsl");
+    pub HiveIQSlashBurnPercent: Percent = Percent::from_percent(50);
+}
+
+impl pallet_hiveiq_settlement::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    type Currency = Balances;
+    type OracleOrigin = EnsureRoot<AccountId>;
+    type ManageOrigin = EnsureRoot<AccountId>;
+    type SlashBurnPercent = HiveIQSlashBurnPercent;
+    type PalletId = HiveIQPalletId;
+}
+
+parameter_types! {
     pub const ExpectedSessionDuration: u32 = EPOCH_DURATION_IN_BLOCKS * SECS_PER_BLOCK as u32;
     pub const AnnualPercentageRate: u32 = 100; // 10%
     pub MultiplierCoefficients: [FixedI128; 4] = [
@@ -1974,6 +1988,7 @@ construct_runtime!(
         EnergyBroker: pallet_energy_broker = 40,
         Privileges: pallet_privileges = 41,
         DynamicEnergy: pallet_dynamic_energy = 42,
+        HiveIQSettlement: pallet_hiveiq_settlement = 43,
         Proxy: pallet_proxy = 44,
 
         // Governance-related pallets

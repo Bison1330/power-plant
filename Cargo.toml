@@ -95,6 +95,7 @@ members = [
     "pallets/energy-generation/runtime-api",
     "pallets/energy-generation/rpc",
     "pallets/faucet",
+    "pallets/hiveiq-settlement",
     "pallets/nac-managing",
     "pallets/privileges",
     "pallets/reputation",
@@ -377,6 +378,7 @@ pallet-energy-broker = { path = "pallets/energy-broker", default-features = fals
 pallet-energy-fee = { path = "pallets/energy-fee", default-features = false }
 pallet-energy-generation = { path = "pallets/energy-generation", default-features = false }
 pallet-faucet = { path = "pallets/faucet", default-features = false }
+pallet-hiveiq-settlement = { path = "pallets/hiveiq-settlement", default-features = false }
 pallet-manual-bridge = { path = "pallets/manual-bridge", default-features = false }
 pallet-nac-managing = { path = "pallets/nac-managing", default-features = false }
 pallet-privileges = { path = "pallets/privileges", default-features = false }

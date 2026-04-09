@@ -122,6 +122,7 @@ pallet-energy-broker = { workspace = true }
 pallet-energy-fee = { workspace = true }
 pallet-energy-generation = { workspace = true }
 pallet-faucet = { workspace = true }
+pallet-hiveiq-settlement = { workspace = true }
 pallet-manual-bridge = { workspace = true }
 pallet-nac-managing = { workspace = true }
 pallet-privileges = { workspace = true }
@@ -182,6 +183,7 @@ try-runtime = [
     "pallet-evm-chain-id/try-runtime",
     "pallet-evm/try-runtime",
     "pallet-faucet/try-runtime",
+    "pallet-hiveiq-settlement/try-runtime",
     "pallet-grandpa/try-runtime",
     "pallet-hotfix-sufficients/try-runtime",
     "pallet-im-online/try-runtime",
@@ -311,6 +313,7 @@ std = [
     "pallet-energy-fee/std",
     "pallet-energy-generation/std",
     "pallet-faucet/std",
+    "pallet-hiveiq-settlement/std",
     "pallet-manual-bridge/std",
     "pallet-nac-managing/std",
     "pallet-privileges/std",
@@ -338,6 +341,7 @@ runtime-benchmarks = [
     "pallet-energy-fee/runtime-benchmarks",
     "pallet-ethereum/runtime-benchmarks",
     "pallet-faucet/runtime-benchmarks",
+    "pallet-hiveiq-settlement/runtime-benchmarks",
     "pallet-hotfix-sufficients/runtime-benchmarks",
     "pallet-multisig/runtime-benchmarks",
     "pallet-nfts/runtime-benchmarks",
