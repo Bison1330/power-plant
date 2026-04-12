@@ -100,6 +100,7 @@ members = [
     "pallets/reputation",
     "pallets/simple-vesting",
     "pallets/treasury-extension",
+    "pallets/vitreus-dex",
     "runtime/common",
     "runtime/vitreus",
     "runtime/vitreus/runtime-api",
@@ -374,6 +375,7 @@ pallet-claiming = { path = "pallets/claiming", default-features = false }
 pallet-democracy-extension = { path = "pallets/democracy-extension", default-features = false }
 pallet-dynamic-energy = { path = "pallets/dynamic-energy", default-features = false }
 pallet-energy-broker = { path = "pallets/energy-broker", default-features = false }
+pallet-vitreus-dex = { path = "pallets/vitreus-dex", default-features = false }
 pallet-energy-fee = { path = "pallets/energy-fee", default-features = false }
 pallet-energy-generation = { path = "pallets/energy-generation", default-features = false }
 pallet-faucet = { path = "pallets/faucet", default-features = false }

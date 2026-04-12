@@ -127,6 +127,7 @@ pallet-nac-managing = { workspace = true }
 pallet-privileges = { workspace = true }
 pallet-reputation = { workspace = true }
 pallet-simple-vesting = { workspace = true }
+pallet-vitreus-dex = { workspace = true }
 pallet-treasury-extension = { workspace = true }
 vitreus-runtime-common = { workspace = true }
 
@@ -175,6 +176,7 @@ try-runtime = [
     "pallet-dynamic-energy/try-runtime",
     "pallet-elections-phragmen/try-runtime",
     "pallet-energy-broker/try-runtime",
+    "pallet-vitreus-dex/try-runtime",
     "pallet-energy-fee/try-runtime",
     "pallet-energy-generation/try-runtime",
     "pallet-energy-generation/try-runtime",
@@ -308,6 +310,7 @@ std = [
     "pallet-democracy-extension/std",
     "pallet-dynamic-energy/std",
     "pallet-energy-broker/std",
+    "pallet-vitreus-dex/std",
     "pallet-energy-fee/std",
     "pallet-energy-generation/std",
     "pallet-faucet/std",
@@ -335,6 +338,7 @@ runtime-benchmarks = [
     "pallet-assets/runtime-benchmarks",
     "pallet-collective/runtime-benchmarks",
     "pallet-energy-broker/runtime-benchmarks",
+    "pallet-vitreus-dex/runtime-benchmarks",
     "pallet-energy-fee/runtime-benchmarks",
     "pallet-ethereum/runtime-benchmarks",
     "pallet-faucet/runtime-benchmarks",

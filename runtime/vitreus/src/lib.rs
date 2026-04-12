@@ -1122,11 +1122,21 @@ impl pallet_energy_broker::Config for Runtime {
     );
     type FeelessAccounts = Equals<xcm_config::TreasuryAccount>;
     type SwapFeeTarget = ResolveAssetTo<pallet_treasury::TreasuryAccountId<Runtime>, Self::Assets>;
-    type OnEnergySell = DynamicEnergy;
+    type OnEnergySell = (DynamicEnergy, VitreusDex);
     type SwapFee = SwapFee;
     type NativeAsset = NativeAsset;
     type EnergyAsset = VNRG;
     type BurnedEnergySessionsCount = BurnedEnergySessionsCount;
+}
+
+impl pallet_vitreus_dex::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    type ManageOrigin = EnsureRoot<AccountId>;
+    type Balance = Balance;
+    type AssetKind = NativeOrAssetId;
+    type Assets = NativeAndAssets;
+    type NativeAsset = NativeAsset;
+    type EnergyAsset = VNRG;
 }
 
 parameter_types! {
@@ -1166,7 +1176,7 @@ impl pallet_energy_fee::Config for Runtime {
     type LiquidEnergyAsset = LiquidEnergyAsset;
     type EnergyExchange = NativeEnergyExchange<EnergyBroker, NativeAsset, VNRG>;
     type OnWithdrawFee = NacManaging;
-    type OnEnergyBurn = (EnergyBroker, DynamicEnergy);
+    type OnEnergyBurn = (EnergyBroker, DynamicEnergy, VitreusDex);
     type FeeRecyclingRate = TreasuryExtension;
     type FeeRecyclingDestination =
         ResolveTo<pallet_treasury::TreasuryAccountId<Runtime>, Self::EnergyAsset>;
@@ -1974,6 +1984,7 @@ construct_runtime!(
         EnergyBroker: pallet_energy_broker = 40,
         Privileges: pallet_privileges = 41,
         DynamicEnergy: pallet_dynamic_energy = 42,
+        VitreusDex: pallet_vitreus_dex = 43,
         Proxy: pallet_proxy = 44,
 
         // Governance-related pallets
