@@ -5,7 +5,7 @@ use crate as pallet_vitreus_dex;
 
 use frame_support::{
     construct_runtime, derive_impl, parameter_types,
-    traits::{AsEnsureOriginWithArg, ConstU128, ConstU32},
+    traits::{AsEnsureOriginWithArg, ConstU128, ConstU32, ConstU64},
 };
 use frame_system::{EnsureRoot, EnsureSigned};
 use sp_runtime::{traits::IdentityLookup, BuildStorage};
@@ -92,6 +92,9 @@ impl Config for Test {
     type Assets = NativeAndAssets;
     type NativeAsset = NativeAsset;
     type EnergyAsset = EnergyAsset;
+    type DefaultBidWindowBlocks = ConstU64<10>;
+    type DefaultSettlementWindowBlocks = ConstU64<5>;
+    type DefaultSolverBondAmount = ConstU128<1_000_000_000_000>;
 }
 
 pub(crate) fn new_test_ext() -> sp_io::TestExternalities {

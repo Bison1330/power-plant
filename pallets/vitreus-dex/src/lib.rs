@@ -11,6 +11,8 @@
 mod mock;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod settlement_integration_tests;
 
 pub mod settlement;
 
@@ -107,6 +109,21 @@ pub mod pallet {
         /// Identifier of energy asset.
         #[pallet::constant]
         type EnergyAsset: Get<Self::AssetKind>;
+
+        // ---- Solver marketplace config ----
+
+        /// Initial default for the bid window in blocks. Can be updated at
+        /// runtime via `set_bid_window` (gated on `ManageOrigin`).
+        #[pallet::constant]
+        type DefaultBidWindowBlocks: Get<BlockNumberFor<Self>>;
+
+        /// Initial default for the settlement window in blocks.
+        #[pallet::constant]
+        type DefaultSettlementWindowBlocks: Get<BlockNumberFor<Self>>;
+
+        /// Initial default for the solver bond amount.
+        #[pallet::constant]
+        type DefaultSolverBondAmount: Get<Self::Balance>;
     }
 
     /// All known pools keyed by their canonical ordered asset pair.
@@ -141,6 +158,76 @@ pub mod pallet {
     /// Cumulative energy burned through the on-chain hook.
     #[pallet::storage]
     pub type TotalEnergyBurned<T: Config> = StorageValue<_, T::Balance, ValueQuery>;
+
+    // ---- Settlement: governance-adjustable parameters ----
+
+    /// Number of blocks during which solvers may bid on an open intent.
+    /// `None` means fall back to `T::DefaultBidWindowBlocks`.
+    #[pallet::storage]
+    pub type BidWindowBlocks<T: Config> = StorageValue<_, BlockNumberFor<T>, OptionQuery>;
+
+    /// Number of blocks a committed solver has to settle before becoming
+    /// slashable. `None` means fall back to `T::DefaultSettlementWindowBlocks`.
+    #[pallet::storage]
+    pub type SettlementWindowBlocks<T: Config> = StorageValue<_, BlockNumberFor<T>, OptionQuery>;
+
+    /// Amount of VTRS a solver must bond to register.
+    /// `None` means fall back to `T::DefaultSolverBondAmount`.
+    #[pallet::storage]
+    pub type SolverBondAmount<T: Config> = StorageValue<_, T::Balance, OptionQuery>;
+
+    // ---- Settlement: id counters ----
+
+    /// Monotonic id for the next submitted intent.
+    #[pallet::storage]
+    pub type NextIntentId<T: Config> = StorageValue<_, u64, ValueQuery>;
+
+    /// Monotonic id for the next registered solver.
+    #[pallet::storage]
+    pub type NextSolverId<T: Config> = StorageValue<_, u64, ValueQuery>;
+
+    // ---- Settlement: data maps ----
+
+    /// All intents by id.
+    #[pallet::storage]
+    pub type Intents<T: Config> = StorageMap<
+        _,
+        Blake2_128Concat,
+        u64,
+        crate::settlement::Intent<T::AccountId, T::AssetKind, T::Balance, BlockNumberFor<T>>,
+        OptionQuery,
+    >;
+
+    /// Index from solver account to solver id, for uniqueness enforcement
+    /// and fast lookup at register time.
+    #[pallet::storage]
+    pub type SolverAccountToId<T: Config> = StorageMap<
+        _,
+        Blake2_128Concat,
+        T::AccountId,
+        u64,
+        OptionQuery,
+    >;
+
+    /// All solvers by id.
+    #[pallet::storage]
+    pub type Solvers<T: Config> = StorageMap<
+        _,
+        Blake2_128Concat,
+        u64,
+        crate::settlement::SolverInfo<T::AccountId, T::Balance, BlockNumberFor<T>>,
+        OptionQuery,
+    >;
+
+    /// Active commitments keyed by intent id. Removed on settle/cancel/slash.
+    #[pallet::storage]
+    pub type FillCommitments<T: Config> = StorageMap<
+        _,
+        Blake2_128Concat,
+        u64,
+        crate::settlement::FillCommitment<T::AccountId, T::Balance, BlockNumberFor<T>>,
+        OptionQuery,
+    >;
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -227,6 +314,126 @@ pub mod pallet {
             /// The amount reported by the hook.
             amount: T::Balance,
         },
+
+        // ---- Solver marketplace events ----
+
+        /// A new solver registered and posted a bond.
+        SolverRegistered {
+            /// Id assigned to the new solver.
+            solver_id: u64,
+            /// Solver's on-chain account.
+            account: T::AccountId,
+            /// Amount of bond posted.
+            bond: T::Balance,
+        },
+
+        /// A solver voluntarily deregistered; bond refunded.
+        SolverDeregistered {
+            /// Id of the solver.
+            solver_id: u64,
+            /// Solver's on-chain account.
+            account: T::AccountId,
+            /// Amount refunded from escrow.
+            bond_refunded: T::Balance,
+        },
+
+        /// A new intent was submitted.
+        IntentSubmitted {
+            /// Id assigned to the new intent.
+            intent_id: u64,
+            /// Submitting user.
+            user: T::AccountId,
+            /// Input asset.
+            token_in: T::AssetKind,
+            /// Desired output asset.
+            token_out: T::AssetKind,
+            /// Amount of input provided.
+            amount_in: T::Balance,
+            /// Minimum acceptable output.
+            min_amount_out: T::Balance,
+            /// Block by which the intent must settle or be refundable.
+            deadline: BlockNumberFor<T>,
+        },
+
+        /// A user cancelled an intent before any commitment.
+        IntentCancelled {
+            /// Id of the cancelled intent.
+            intent_id: u64,
+            /// User who cancelled.
+            user: T::AccountId,
+        },
+
+        /// A solver committed to fill an intent.
+        FillCommitted {
+            /// Intent being filled.
+            intent_id: u64,
+            /// Solver making the commitment.
+            solver_id: u64,
+            /// Amount the solver promises to deliver to the user.
+            committed_amount_out: T::Balance,
+            /// Deadline for settlement.
+            settle_by: BlockNumberFor<T>,
+        },
+
+        /// An intent was successfully settled.
+        IntentSettled {
+            /// Intent that was settled.
+            intent_id: u64,
+            /// Solver that settled it.
+            solver_id: u64,
+            /// User who submitted the intent.
+            user: T::AccountId,
+            /// Amount delivered to the user.
+            amount_out_to_user: T::Balance,
+            /// Solver's net profit after protocol fee.
+            solver_net_profit: T::Balance,
+            /// Protocol fee taken from solver profit.
+            protocol_fee: T::Balance,
+        },
+
+        /// A solver was slashed for failing to settle within the window.
+        SolverSlashed {
+            /// Solver that was slashed.
+            solver_id: u64,
+            /// Intent whose non-settlement triggered the slash.
+            intent_id: u64,
+            /// Total amount slashed from the solver's bond.
+            slashed_amount: T::Balance,
+            /// Portion sent to the protocol treasury.
+            to_treasury: T::Balance,
+            /// Portion awarded to the slasher.
+            to_slasher: T::Balance,
+            /// Account that triggered the slash.
+            slasher: T::AccountId,
+        },
+
+        /// An expired intent was refunded to its owner.
+        IntentRefunded {
+            /// Intent that was refunded.
+            intent_id: u64,
+            /// User who was refunded.
+            user: T::AccountId,
+            /// Amount of `token_in` returned to the user.
+            amount_refunded: T::Balance,
+        },
+
+        /// Governance updated the bid window.
+        BidWindowUpdated {
+            /// New bid window value (in blocks).
+            new_value: BlockNumberFor<T>,
+        },
+
+        /// Governance updated the settlement window.
+        SettlementWindowUpdated {
+            /// New settlement window value (in blocks).
+            new_value: BlockNumberFor<T>,
+        },
+
+        /// Governance updated the solver bond amount.
+        SolverBondAmountUpdated {
+            /// New solver bond amount.
+            new_value: T::Balance,
+        },
     }
 
     #[pallet::error]
@@ -251,6 +458,46 @@ pub mod pallet {
         Overflow,
         /// Initial liquidity deposit is too small to exceed MINIMUM_LIQUIDITY.
         InsufficientInitialLiquidity,
+
+        // ---- Solver marketplace errors ----
+        /// Caller is not a registered solver.
+        SolverNotRegistered,
+        /// Account has already registered as a solver.
+        SolverAlreadyRegistered,
+        /// Solver exists but is not currently active.
+        SolverNotActive,
+        /// Caller does not hold enough VTRS to post the bond.
+        InsufficientBondFunds,
+        /// No intent with the given id.
+        IntentNotFound,
+        /// Operation requires the intent to be in `Open` status.
+        IntentNotOpen,
+        /// Operation requires the intent to be in `Committed` status.
+        IntentNotCommitted,
+        /// Intent's deadline has passed.
+        IntentExpired,
+        /// Caller is not the intent's original submitter.
+        NotIntentOwner,
+        /// Bid window has closed for this intent.
+        BidWindowClosed,
+        /// Committed amount out is below the intent's minimum.
+        BelowMinAmountOut,
+        /// Incoming bid is not strictly better than the existing one.
+        BidNotBetter,
+        /// Caller is not the solver that committed to this intent.
+        NotCommittedSolver,
+        /// Settlement deadline has already passed.
+        SettlementWindowPassed,
+        /// Settlement deadline has not yet passed (slashing requires it to).
+        SettlementWindowNotPassed,
+        /// Solver still has active commitments; cannot deregister yet.
+        ActiveCommitmentsExist,
+        /// Deadline is in the past or not far enough in the future.
+        InvalidDeadline,
+        /// Amount parameter is zero or otherwise invalid.
+        InvalidAmount,
+        /// Swap output did not meet the user's slippage bound.
+        SlippageProtectionFailed,
     }
 
     #[pallet::hooks]
@@ -590,6 +837,52 @@ pub mod pallet {
 
             Ok(())
         }
+
+        // ---- Solver marketplace: governance setters ----
+
+        /// Update the bid window (in blocks). Gated on `ManageOrigin`.
+        #[pallet::call_index(13)]
+        #[pallet::weight(Weight::from_parts(50_000_000, 5_000))]
+        pub fn set_bid_window(
+            origin: OriginFor<T>,
+            new_value: BlockNumberFor<T>,
+        ) -> DispatchResult {
+            T::ManageOrigin::ensure_origin(origin)?;
+            ensure!(!new_value.is_zero(), Error::<T>::InvalidAmount);
+            BidWindowBlocks::<T>::put(new_value);
+            Self::deposit_event(Event::BidWindowUpdated { new_value });
+            Ok(())
+        }
+
+        /// Update the settlement window (in blocks). Gated on `ManageOrigin`.
+        #[pallet::call_index(14)]
+        #[pallet::weight(Weight::from_parts(50_000_000, 5_000))]
+        pub fn set_settlement_window(
+            origin: OriginFor<T>,
+            new_value: BlockNumberFor<T>,
+        ) -> DispatchResult {
+            T::ManageOrigin::ensure_origin(origin)?;
+            ensure!(!new_value.is_zero(), Error::<T>::InvalidAmount);
+            SettlementWindowBlocks::<T>::put(new_value);
+            Self::deposit_event(Event::SettlementWindowUpdated { new_value });
+            Ok(())
+        }
+
+        /// Update the required solver bond amount. Gated on `ManageOrigin`.
+        /// Does not retroactively affect solvers already bonded at the prior
+        /// amount; only applies to new registrations.
+        #[pallet::call_index(15)]
+        #[pallet::weight(Weight::from_parts(50_000_000, 5_000))]
+        pub fn set_solver_bond_amount(
+            origin: OriginFor<T>,
+            new_value: T::Balance,
+        ) -> DispatchResult {
+            T::ManageOrigin::ensure_origin(origin)?;
+            ensure!(!new_value.is_zero(), Error::<T>::InvalidAmount);
+            SolverBondAmount::<T>::put(new_value);
+            Self::deposit_event(Event::SolverBondAmountUpdated { new_value });
+            Ok(())
+        }
     }
 
     impl<T: Config> Pallet<T> {
@@ -745,6 +1038,64 @@ pub mod pallet {
             });
 
             Ok(amount_out)
+        }
+
+        // ====================================================================
+        // Settlement helpers
+        // ====================================================================
+
+        /// Current bid window. Uses storage value if set, otherwise the
+        /// genesis default from `T::DefaultBidWindowBlocks`.
+        // Temporary: wired into Part 2b/2c extrinsics; will be called from
+        // non-test code in the next handoff.
+        #[cfg_attr(not(test), allow(dead_code))]
+        pub(crate) fn current_bid_window() -> BlockNumberFor<T> {
+            BidWindowBlocks::<T>::get().unwrap_or_else(T::DefaultBidWindowBlocks::get)
+        }
+
+        /// Current settlement window.
+        #[cfg_attr(not(test), allow(dead_code))]
+        pub(crate) fn current_settlement_window() -> BlockNumberFor<T> {
+            SettlementWindowBlocks::<T>::get()
+                .unwrap_or_else(T::DefaultSettlementWindowBlocks::get)
+        }
+
+        /// Current solver bond amount.
+        #[cfg_attr(not(test), allow(dead_code))]
+        pub(crate) fn current_solver_bond() -> T::Balance {
+            SolverBondAmount::<T>::get().unwrap_or_else(T::DefaultSolverBondAmount::get)
+        }
+
+        /// Derive the escrow account holding a specific solver's bond.
+        ///
+        /// Deterministic function of `solver_id`. Each solver gets a unique
+        /// sub-account so slashing and refunds cannot mix funds. The
+        /// `solver_id.to_le_bytes()` occupy the front of the seed so that
+        /// they survive truncation on shorter `AccountId` types (e.g., u128
+        /// in tests); the `"slvr"` tag sits after them and is visible on
+        /// 32-byte accounts.
+        #[cfg_attr(not(test), allow(dead_code))]
+        pub(crate) fn solver_escrow_account(solver_id: u64) -> T::AccountId {
+            let mut seed = [0u8; 12];
+            seed[..8].copy_from_slice(&solver_id.to_le_bytes());
+            seed[8..].copy_from_slice(b"slvr");
+            PALLET_ID.into_sub_account_truncating(seed)
+        }
+
+        /// Derive the shared escrow account holding all pending intent
+        /// `token_in` balances. Per-intent accounting lives in the `Intents`
+        /// storage map.
+        #[cfg_attr(not(test), allow(dead_code))]
+        pub(crate) fn intent_escrow_account() -> T::AccountId {
+            PALLET_ID.into_sub_account_truncating(b"intents")
+        }
+
+        /// Derive the protocol fee treasury account (where the protocol's
+        /// share of solver profits accrues). Downstream distribution happens
+        /// off this account via a separate sweep extrinsic in a later phase.
+        #[cfg_attr(not(test), allow(dead_code))]
+        pub(crate) fn protocol_treasury_account() -> T::AccountId {
+            PALLET_ID.into_sub_account_truncating(b"fee_trsy")
         }
     }
 }
