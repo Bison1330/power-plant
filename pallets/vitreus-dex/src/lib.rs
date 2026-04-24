@@ -553,112 +553,7 @@ pub mod pallet {
             recipient: T::AccountId,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
-
-            ensure!(amount_in > Zero::zero(), Error::<T>::ZeroAmount);
-
-            // Finding 5: canonicalize pair for lookup.
-            let pair = Self::canonical_pair(asset_in.clone(), asset_out.clone());
-            let mut pool = Pools::<T>::get(&pair).ok_or(Error::<T>::PoolNotFound)?;
-
-            // Finding 2: sync reserves from actual on-chain balances.
-            Self::sync_reserves(&pair, &mut pool);
-
-            let flipped = pair.0.encode() != asset_in.encode();
-            let (reserve_in, reserve_out) = if flipped {
-                (pool.reserve_b, pool.reserve_a)
-            } else {
-                (pool.reserve_a, pool.reserve_b)
-            };
-
-            ensure!(
-                !reserve_in.is_zero() && !reserve_out.is_zero(),
-                Error::<T>::InsufficientLiquidity
-            );
-
-            let fee_tier_bal: T::Balance = pool.fee_tier.into();
-            let denominator_bal: T::Balance = FEE_DENOMINATOR.into();
-
-            let fee = amount_in
-                .checked_mul(&fee_tier_bal)
-                .ok_or(Error::<T>::Overflow)?
-                .checked_div(&denominator_bal)
-                .ok_or(Error::<T>::Overflow)?;
-            let amount_in_after_fee =
-                amount_in.checked_sub(&fee).ok_or(Error::<T>::Overflow)?;
-
-            let numerator = reserve_out
-                .checked_mul(&amount_in_after_fee)
-                .ok_or(Error::<T>::Overflow)?;
-            let denom = reserve_in
-                .checked_add(&amount_in_after_fee)
-                .ok_or(Error::<T>::Overflow)?;
-            let amount_out = numerator
-                .checked_div(&denom)
-                .ok_or(Error::<T>::InsufficientLiquidity)?;
-
-            ensure!(amount_out >= amount_out_min, Error::<T>::SlippageExceeded);
-            ensure!(amount_out < reserve_out, Error::<T>::InsufficientLiquidity);
-
-            T::Assets::transfer(
-                asset_in.clone(),
-                &who,
-                &pool.pool_account,
-                amount_in,
-                Expendable,
-            )?;
-            T::Assets::transfer(
-                asset_out.clone(),
-                &pool.pool_account,
-                &recipient,
-                amount_out,
-                Expendable,
-            )?;
-
-            // Finding 3: only add amount_in_after_fee to reserves; the fee stays in
-            // the pool account but is not counted in reserves until the next sync.
-            if flipped {
-                pool.reserve_b = pool
-                    .reserve_b
-                    .checked_add(&amount_in_after_fee)
-                    .ok_or(Error::<T>::Overflow)?;
-                pool.reserve_a = pool
-                    .reserve_a
-                    .checked_sub(&amount_out)
-                    .ok_or(Error::<T>::InsufficientLiquidity)?;
-            } else {
-                pool.reserve_a = pool
-                    .reserve_a
-                    .checked_add(&amount_in_after_fee)
-                    .ok_or(Error::<T>::Overflow)?;
-                pool.reserve_b = pool
-                    .reserve_b
-                    .checked_sub(&amount_out)
-                    .ok_or(Error::<T>::InsufficientLiquidity)?;
-            }
-            pool.total_fees_collected = pool
-                .total_fees_collected
-                .checked_add(&fee)
-                .ok_or(Error::<T>::Overflow)?;
-
-            let pool_account_for_event = pool.pool_account.clone();
-            Pools::<T>::insert(&pair, pool);
-
-            Self::deposit_event(Event::SwapExecuted {
-                who,
-                asset_in,
-                asset_out,
-                amount_in,
-                amount_out,
-                fee,
-            });
-
-            // Finding 11: emit FeesCollected event.
-            Self::deposit_event(Event::FeesCollected {
-                pool: pair,
-                amount: fee,
-                recipient: pool_account_for_event,
-            });
-
+            Self::do_swap(&who, asset_in, asset_out, amount_in, amount_out_min, &recipient)?;
             Ok(())
         }
 
@@ -725,6 +620,131 @@ pub mod pallet {
         ) {
             pool.reserve_a = T::Assets::balance(pair.0.clone(), &pool.pool_account);
             pool.reserve_b = T::Assets::balance(pair.1.clone(), &pool.pool_account);
+        }
+
+        /// Execute a swap on behalf of `who`, depositing output to `recipient`.
+        ///
+        /// Returns the actual `amount_out` transferred to `recipient`. Callers use
+        /// this for slippage-capture economics (e.g., solver marketplace).
+        ///
+        /// Behaviorally identical to the body of `swap_exact_tokens_for_tokens`:
+        /// loads the pool, syncs reserves, computes constant-product output, applies
+        /// fee, performs transfers, updates storage, emits `SwapExecuted` and
+        /// `FeesCollected`.
+        pub(crate) fn do_swap(
+            who: &T::AccountId,
+            asset_in: T::AssetKind,
+            asset_out: T::AssetKind,
+            amount_in: T::Balance,
+            amount_out_min: T::Balance,
+            recipient: &T::AccountId,
+        ) -> Result<T::Balance, DispatchError> {
+            ensure!(amount_in > Zero::zero(), Error::<T>::ZeroAmount);
+
+            // Finding 5: canonicalize pair for lookup.
+            let pair = Self::canonical_pair(asset_in.clone(), asset_out.clone());
+            let mut pool = Pools::<T>::get(&pair).ok_or(Error::<T>::PoolNotFound)?;
+
+            // Finding 2: sync reserves from actual on-chain balances.
+            Self::sync_reserves(&pair, &mut pool);
+
+            let flipped = pair.0.encode() != asset_in.encode();
+            let (reserve_in, reserve_out) = if flipped {
+                (pool.reserve_b, pool.reserve_a)
+            } else {
+                (pool.reserve_a, pool.reserve_b)
+            };
+
+            ensure!(
+                !reserve_in.is_zero() && !reserve_out.is_zero(),
+                Error::<T>::InsufficientLiquidity
+            );
+
+            let fee_tier_bal: T::Balance = pool.fee_tier.into();
+            let denominator_bal: T::Balance = FEE_DENOMINATOR.into();
+
+            let fee = amount_in
+                .checked_mul(&fee_tier_bal)
+                .ok_or(Error::<T>::Overflow)?
+                .checked_div(&denominator_bal)
+                .ok_or(Error::<T>::Overflow)?;
+            let amount_in_after_fee =
+                amount_in.checked_sub(&fee).ok_or(Error::<T>::Overflow)?;
+
+            let numerator = reserve_out
+                .checked_mul(&amount_in_after_fee)
+                .ok_or(Error::<T>::Overflow)?;
+            let denom = reserve_in
+                .checked_add(&amount_in_after_fee)
+                .ok_or(Error::<T>::Overflow)?;
+            let amount_out = numerator
+                .checked_div(&denom)
+                .ok_or(Error::<T>::InsufficientLiquidity)?;
+
+            ensure!(amount_out >= amount_out_min, Error::<T>::SlippageExceeded);
+            ensure!(amount_out < reserve_out, Error::<T>::InsufficientLiquidity);
+
+            T::Assets::transfer(
+                asset_in.clone(),
+                who,
+                &pool.pool_account,
+                amount_in,
+                Expendable,
+            )?;
+            T::Assets::transfer(
+                asset_out.clone(),
+                &pool.pool_account,
+                recipient,
+                amount_out,
+                Expendable,
+            )?;
+
+            // Finding 3: only add amount_in_after_fee to reserves; the fee stays in
+            // the pool account but is not counted in reserves until the next sync.
+            if flipped {
+                pool.reserve_b = pool
+                    .reserve_b
+                    .checked_add(&amount_in_after_fee)
+                    .ok_or(Error::<T>::Overflow)?;
+                pool.reserve_a = pool
+                    .reserve_a
+                    .checked_sub(&amount_out)
+                    .ok_or(Error::<T>::InsufficientLiquidity)?;
+            } else {
+                pool.reserve_a = pool
+                    .reserve_a
+                    .checked_add(&amount_in_after_fee)
+                    .ok_or(Error::<T>::Overflow)?;
+                pool.reserve_b = pool
+                    .reserve_b
+                    .checked_sub(&amount_out)
+                    .ok_or(Error::<T>::InsufficientLiquidity)?;
+            }
+            pool.total_fees_collected = pool
+                .total_fees_collected
+                .checked_add(&fee)
+                .ok_or(Error::<T>::Overflow)?;
+
+            let pool_account_for_event = pool.pool_account.clone();
+            Pools::<T>::insert(&pair, pool);
+
+            Self::deposit_event(Event::SwapExecuted {
+                who: who.clone(),
+                asset_in,
+                asset_out,
+                amount_in,
+                amount_out,
+                fee,
+            });
+
+            // Finding 11: emit FeesCollected event.
+            Self::deposit_event(Event::FeesCollected {
+                pool: pair,
+                amount: fee,
+                recipient: pool_account_for_event,
+            });
+
+            Ok(amount_out)
         }
     }
 }
