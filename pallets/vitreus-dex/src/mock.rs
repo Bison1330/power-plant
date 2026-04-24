@@ -101,7 +101,9 @@ pub(crate) fn new_test_ext() -> sp_io::TestExternalities {
     let mut t = frame_system::GenesisConfig::<Test>::default().build_storage().unwrap();
 
     pallet_balances::GenesisConfig::<Test> {
-        balances: vec![(ALICE, 1_000_000), (BOB, 1_000_000)],
+        // 10× the default solver bond (1e12) so tests can run register +
+        // deregister + re-register flows without hitting ED or balance limits.
+        balances: vec![(ALICE, 10_000_000_000_000), (BOB, 10_000_000_000_000)],
     }
     .assimilate_storage(&mut t)
     .unwrap();

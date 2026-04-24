@@ -102,6 +102,10 @@ pub struct SolverInfo<AccountId, Balance, BlockNumber> {
     pub fills_completed: u64,
     /// Count of times this solver has been slashed.
     pub fills_slashed: u64,
+    /// Count of currently-committed (not yet settled/slashed) fills. Must be
+    /// zero to deregister. Incremented in `commit_fill`, decremented in
+    /// `settle_intent` / slash / expire paths.
+    pub active_commitments: u32,
     /// Block at which the solver registered.
     pub registered_at: BlockNumber,
     /// False after voluntary deregistration (bond refunded) or a full slash.

@@ -21,7 +21,7 @@ pub use pallet::*;
 use frame_support::{
     traits::{
         fungibles::{Balanced, Inspect, Mutate},
-        tokens::{Balance, Preservation::Expendable},
+        tokens::{Balance, Preservation::{Expendable, Preserve}},
     },
     PalletId,
 };
@@ -122,6 +122,13 @@ pub mod pallet {
         type DefaultSettlementWindowBlocks: Get<BlockNumberFor<Self>>;
 
         /// Initial default for the solver bond amount.
+        ///
+        /// Denominated in the native-asset sub-unit (VTRS uses 18 decimals
+        /// in the production runtime, so 1 VTRS = 10^18 sub-units). The
+        /// production runtime should bind this to something on the order of
+        /// `1_000 * UNITS` (≈ 10^21 sub-units); the test mock binds it to
+        /// `1_000_000_000_000` which is fine for tests but equals only
+        /// 10^-6 VTRS in production denominations.
         #[pallet::constant]
         type DefaultSolverBondAmount: Get<Self::Balance>;
     }
@@ -226,6 +233,18 @@ pub mod pallet {
         Blake2_128Concat,
         u64,
         crate::settlement::FillCommitment<T::AccountId, T::Balance, BlockNumberFor<T>>,
+        OptionQuery,
+    >;
+
+    /// Amount held in the shared intent escrow per-intent. Tracks how much
+    /// `token_in` the escrow account owes back to each intent owner.
+    /// Insert on `submit_intent`, remove on settle / cancel / refund.
+    #[pallet::storage]
+    pub type IntentEscrowBalances<T: Config> = StorageMap<
+        _,
+        Blake2_128Concat,
+        u64,
+        (T::AssetKind, T::Balance),
         OptionQuery,
     >;
 
@@ -838,6 +857,219 @@ pub mod pallet {
             Ok(())
         }
 
+        // ---- Solver marketplace: solver lifecycle ----
+
+        /// Register as a solver. Transfers the required bond from the caller
+        /// to a per-solver escrow sub-account derived from the assigned id.
+        #[pallet::call_index(5)]
+        #[pallet::weight(Weight::from_parts(150_000_000, 15_000))]
+        pub fn register_solver(origin: OriginFor<T>) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+
+            // Reject duplicate active registration. If a prior registration
+            // exists but is inactive (deregistered / slashed), allow a fresh
+            // registration with a new solver_id.
+            if let Some(existing_id) = SolverAccountToId::<T>::get(&who) {
+                if let Some(solver) = Solvers::<T>::get(existing_id) {
+                    if solver.active {
+                        return Err(Error::<T>::SolverAlreadyRegistered.into());
+                    }
+                }
+            }
+
+            let bond_amount = Self::current_solver_bond();
+            let native_asset = T::NativeAsset::get();
+
+            let solver_id = NextSolverId::<T>::get();
+            let escrow = Self::solver_escrow_account(solver_id);
+
+            T::Assets::transfer(
+                native_asset,
+                &who,
+                &escrow,
+                bond_amount,
+                Preserve,
+            )
+            .map_err(|_| Error::<T>::InsufficientBondFunds)?;
+
+            let now = frame_system::Pallet::<T>::block_number();
+            let info = crate::settlement::SolverInfo {
+                id: solver_id,
+                account: who.clone(),
+                bond: bond_amount,
+                reputation: 0,
+                fills_completed: 0,
+                fills_slashed: 0,
+                active_commitments: 0,
+                registered_at: now,
+                active: true,
+            };
+
+            Solvers::<T>::insert(solver_id, info);
+            SolverAccountToId::<T>::insert(&who, solver_id);
+            NextSolverId::<T>::put(solver_id.saturating_add(1));
+
+            Self::deposit_event(Event::SolverRegistered {
+                solver_id,
+                account: who,
+                bond: bond_amount,
+            });
+
+            Ok(())
+        }
+
+        /// Voluntarily deregister as a solver. Refunds the full bond.
+        /// Fails if the solver has any active (committed but unsettled) fills.
+        #[pallet::call_index(6)]
+        #[pallet::weight(Weight::from_parts(100_000_000, 10_000))]
+        pub fn deregister_solver(origin: OriginFor<T>) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+
+            let solver_id = SolverAccountToId::<T>::get(&who)
+                .ok_or(Error::<T>::SolverNotRegistered)?;
+            let mut solver = Solvers::<T>::get(solver_id)
+                .ok_or(Error::<T>::SolverNotRegistered)?;
+
+            ensure!(solver.active, Error::<T>::SolverNotActive);
+            ensure!(
+                solver.active_commitments == 0,
+                Error::<T>::ActiveCommitmentsExist,
+            );
+
+            let escrow = Self::solver_escrow_account(solver_id);
+            let native_asset = T::NativeAsset::get();
+            let bond = solver.bond;
+
+            T::Assets::transfer(
+                native_asset,
+                &escrow,
+                &who,
+                bond,
+                Expendable,
+            )
+            .map_err(|_| Error::<T>::InsufficientBondFunds)?;
+
+            solver.active = false;
+            solver.bond = Zero::zero();
+            Solvers::<T>::insert(solver_id, solver);
+
+            Self::deposit_event(Event::SolverDeregistered {
+                solver_id,
+                account: who,
+                bond_refunded: bond,
+            });
+
+            Ok(())
+        }
+
+        // ---- Solver marketplace: intent lifecycle ----
+
+        /// Submit a trading intent. Escrows `amount_in` of `token_in` to the
+        /// shared intent escrow account. Solvers may bid during the next
+        /// `current_bid_window()` blocks.
+        #[pallet::call_index(7)]
+        #[pallet::weight(Weight::from_parts(200_000_000, 20_000))]
+        pub fn submit_intent(
+            origin: OriginFor<T>,
+            token_in: T::AssetKind,
+            token_out: T::AssetKind,
+            amount_in: T::Balance,
+            min_amount_out: T::Balance,
+            deadline: BlockNumberFor<T>,
+        ) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+
+            ensure!(!amount_in.is_zero(), Error::<T>::InvalidAmount);
+            ensure!(token_in != token_out, Error::<T>::InvalidAmount);
+
+            let now = frame_system::Pallet::<T>::block_number();
+            ensure!(deadline > now, Error::<T>::InvalidDeadline);
+
+            let escrow = Self::intent_escrow_account();
+            T::Assets::transfer(
+                token_in.clone(),
+                &who,
+                &escrow,
+                amount_in,
+                Preserve,
+            )
+            .map_err(|_| Error::<T>::InvalidAmount)?;
+
+            let intent_id = NextIntentId::<T>::get();
+
+            let intent = crate::settlement::Intent {
+                id: intent_id,
+                user: who.clone(),
+                token_in: token_in.clone(),
+                token_out: token_out.clone(),
+                amount_in,
+                min_amount_out,
+                deadline,
+                submitted_at: now,
+                status: crate::settlement::IntentStatus::Open,
+            };
+
+            Intents::<T>::insert(intent_id, intent);
+            IntentEscrowBalances::<T>::insert(intent_id, (token_in.clone(), amount_in));
+            NextIntentId::<T>::put(intent_id.saturating_add(1));
+
+            Self::deposit_event(Event::IntentSubmitted {
+                intent_id,
+                user: who,
+                token_in,
+                token_out,
+                amount_in,
+                min_amount_out,
+                deadline,
+            });
+
+            Ok(())
+        }
+
+        /// Cancel an open intent. Only callable by the intent owner. Refunds
+        /// `amount_in` of `token_in`. Only succeeds while the intent is
+        /// still `Open` (no solver has committed).
+        #[pallet::call_index(8)]
+        #[pallet::weight(Weight::from_parts(150_000_000, 15_000))]
+        pub fn cancel_intent(origin: OriginFor<T>, intent_id: u64) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+
+            let mut intent = Intents::<T>::get(intent_id)
+                .ok_or(Error::<T>::IntentNotFound)?;
+
+            ensure!(intent.user == who, Error::<T>::NotIntentOwner);
+            ensure!(
+                intent.status == crate::settlement::IntentStatus::Open,
+                Error::<T>::IntentNotOpen,
+            );
+
+            // Use the recorded escrow balance (defense in depth — future
+            // changes could adjust escrow mid-life).
+            let (escrow_asset, escrow_amount) = IntentEscrowBalances::<T>::get(intent_id)
+                .ok_or(Error::<T>::IntentNotFound)?;
+
+            let escrow = Self::intent_escrow_account();
+            T::Assets::transfer(
+                escrow_asset,
+                &escrow,
+                &who,
+                escrow_amount,
+                Expendable,
+            )
+            .map_err(|_| Error::<T>::InvalidAmount)?;
+
+            intent.status = crate::settlement::IntentStatus::Cancelled;
+            Intents::<T>::insert(intent_id, intent);
+            IntentEscrowBalances::<T>::remove(intent_id);
+
+            Self::deposit_event(Event::IntentCancelled {
+                intent_id,
+                user: who,
+            });
+
+            Ok(())
+        }
+
         // ---- Solver marketplace: governance setters ----
 
         /// Update the bid window (in blocks). Gated on `ManageOrigin`.
@@ -1046,8 +1278,6 @@ pub mod pallet {
 
         /// Current bid window. Uses storage value if set, otherwise the
         /// genesis default from `T::DefaultBidWindowBlocks`.
-        // Temporary: wired into Part 2b/2c extrinsics; will be called from
-        // non-test code in the next handoff.
         #[cfg_attr(not(test), allow(dead_code))]
         pub(crate) fn current_bid_window() -> BlockNumberFor<T> {
             BidWindowBlocks::<T>::get().unwrap_or_else(T::DefaultBidWindowBlocks::get)
@@ -1061,7 +1291,6 @@ pub mod pallet {
         }
 
         /// Current solver bond amount.
-        #[cfg_attr(not(test), allow(dead_code))]
         pub(crate) fn current_solver_bond() -> T::Balance {
             SolverBondAmount::<T>::get().unwrap_or_else(T::DefaultSolverBondAmount::get)
         }
@@ -1074,7 +1303,6 @@ pub mod pallet {
         /// they survive truncation on shorter `AccountId` types (e.g., u128
         /// in tests); the `"slvr"` tag sits after them and is visible on
         /// 32-byte accounts.
-        #[cfg_attr(not(test), allow(dead_code))]
         pub(crate) fn solver_escrow_account(solver_id: u64) -> T::AccountId {
             let mut seed = [0u8; 12];
             seed[..8].copy_from_slice(&solver_id.to_le_bytes());
@@ -1085,7 +1313,6 @@ pub mod pallet {
         /// Derive the shared escrow account holding all pending intent
         /// `token_in` balances. Per-intent accounting lives in the `Intents`
         /// storage map.
-        #[cfg_attr(not(test), allow(dead_code))]
         pub(crate) fn intent_escrow_account() -> T::AccountId {
             PALLET_ID.into_sub_account_truncating(b"intents")
         }
