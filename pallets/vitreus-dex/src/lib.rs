@@ -38,6 +38,9 @@ pub const PALLET_ID: PalletId = PalletId(*b"vtrs/dex");
 /// Denominator for the fee tier, expressed in 10ths of a percent.
 pub const FEE_DENOMINATOR: u32 = 1_000;
 
+/// Minimum liquidity permanently locked on first deposit to prevent first-depositor attacks.
+pub const MINIMUM_LIQUIDITY: u32 = 1_000;
+
 /// On-chain record of a trading pair's reserves, fee tier and dedicated sub-account.
 #[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 pub struct PoolInfo<Balance, AccountId> {
@@ -58,7 +61,7 @@ pub struct PoolInfo<Balance, AccountId> {
 pub struct LiquidityPosition<Balance, BlockNumber> {
     /// LP shares owned by the provider.
     pub shares: Balance,
-    /// Block at which the position was opened or last topped up.
+    /// Block at which the position was opened.
     pub entry_block: BlockNumber,
     /// Block until which the position is locked, if any.
     pub locked_until: Option<BlockNumber>,
@@ -104,7 +107,7 @@ pub mod pallet {
         type EnergyAsset: Get<Self::AssetKind>;
     }
 
-    /// All known pools keyed by their ordered asset pair.
+    /// All known pools keyed by their canonical ordered asset pair.
     #[pallet::storage]
     pub type Pools<T: Config> = StorageMap<
         _,
@@ -128,6 +131,14 @@ pub mod pallet {
     #[pallet::storage]
     pub type TotalLiquidity<T: Config> =
         StorageMap<_, Blake2_128Concat, (T::AssetKind, T::AssetKind), T::Balance>;
+
+    /// Cumulative energy sold through the on-chain hook.
+    #[pallet::storage]
+    pub type TotalEnergySold<T: Config> = StorageValue<_, T::Balance, ValueQuery>;
+
+    /// Cumulative energy burned through the on-chain hook.
+    #[pallet::storage]
+    pub type TotalEnergyBurned<T: Config> = StorageValue<_, T::Balance, ValueQuery>;
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -195,6 +206,15 @@ pub mod pallet {
             /// Beneficiary of the collected fees.
             recipient: T::AccountId,
         },
+        /// A liquidity position has been locked until a given block.
+        LiquidityLocked {
+            /// The account that locked the position.
+            who: T::AccountId,
+            /// The pool pair.
+            pool: (T::AssetKind, T::AssetKind),
+            /// The block until which the position is locked.
+            locked_until: BlockNumberFor<T>,
+        },
         /// The `OnEnergySell` hook was invoked against this pallet.
         EnergySold {
             /// The amount reported by the hook.
@@ -227,6 +247,8 @@ pub mod pallet {
         ZeroAmount,
         /// An overflow happened.
         Overflow,
+        /// Initial liquidity deposit is too small to exceed MINIMUM_LIQUIDITY.
+        InsufficientInitialLiquidity,
     }
 
     #[pallet::hooks]
@@ -245,12 +267,19 @@ pub mod pallet {
         ) -> DispatchResult {
             T::ManageOrigin::ensure_origin(origin)?;
 
-            ensure!(fee_tier < FEE_DENOMINATOR, Error::<T>::InvalidFeeTier);
+            // Finding 4: whitelist allowed fee tiers (0.1%, 0.3%, 1.0%).
+            ensure!(
+                fee_tier == 1 || fee_tier == 3 || fee_tier == 10,
+                Error::<T>::InvalidFeeTier
+            );
 
-            let pair = (asset_a.clone(), asset_b.clone());
+            // Finding 5: canonicalize pair to prevent duplicate pools.
+            let pair = Self::canonical_pair(asset_a, asset_b);
             ensure!(!Pools::<T>::contains_key(&pair), Error::<T>::PoolAlreadyExists);
 
-            let pool_account: T::AccountId = PALLET_ID.into_sub_account_truncating(&pair);
+            // Finding 6: length-prefix each asset encoding to avoid truncation collisions.
+            let pair_key = (pair.0.encode(), pair.1.encode());
+            let pool_account: T::AccountId = PALLET_ID.into_sub_account_truncating(&pair_key);
 
             let pool = PoolInfo {
                 reserve_a: Zero::zero(),
@@ -263,7 +292,11 @@ pub mod pallet {
             Pools::<T>::insert(&pair, pool);
             TotalLiquidity::<T>::insert(&pair, T::Balance::zero());
 
-            Self::deposit_event(Event::PoolCreated { asset_a, asset_b, fee_tier });
+            Self::deposit_event(Event::PoolCreated {
+                asset_a: pair.0,
+                asset_b: pair.1,
+                fee_tier,
+            });
             Ok(())
         }
 
@@ -285,58 +318,91 @@ pub mod pallet {
                 amount_a > Zero::zero() && amount_b > Zero::zero(),
                 Error::<T>::ZeroAmount
             );
-            ensure!(amount_a >= amount_a_min, Error::<T>::SlippageExceeded);
-            ensure!(amount_b >= amount_b_min, Error::<T>::SlippageExceeded);
 
-            let pair = (asset_a.clone(), asset_b.clone());
+            // Finding 5: canonicalize pair.
+            let pair = Self::canonical_pair(asset_a, asset_b);
             let mut pool = Pools::<T>::get(&pair).ok_or(Error::<T>::PoolNotFound)?;
             let total_shares =
                 TotalLiquidity::<T>::get(&pair).unwrap_or_else(T::Balance::zero);
 
-            let shares = if total_shares.is_zero() {
-                amount_a
+            // Determine actual deposit amounts and shares to mint.
+            let (actual_a, actual_b, total_new_shares, shares_to_mint) = if total_shares.is_zero()
+            {
+                // Finding 1: first deposit — burn MINIMUM_LIQUIDITY shares permanently.
+                let raw_shares = amount_a
                     .checked_mul(&amount_b)
                     .ok_or(Error::<T>::Overflow)?
-                    .integer_sqrt()
+                    .integer_sqrt();
+                let min_liq: T::Balance = MINIMUM_LIQUIDITY.into();
+                ensure!(raw_shares > min_liq, Error::<T>::InsufficientInitialLiquidity);
+                let shares_to_mint = raw_shares
+                    .checked_sub(&min_liq)
+                    .ok_or(Error::<T>::Overflow)?;
+                // total includes the locked minimum; user only receives the remainder.
+                (amount_a, amount_b, raw_shares, shares_to_mint)
             } else {
-                let share_a = amount_a
+                // Finding 8: calculate optimal amounts — don't donate excess tokens.
+                let optimal_b = amount_a
+                    .checked_mul(&pool.reserve_b)
+                    .ok_or(Error::<T>::Overflow)?
+                    .checked_div(&pool.reserve_a)
+                    .ok_or(Error::<T>::InsufficientLiquidity)?;
+
+                let (actual_a, actual_b) = if optimal_b <= amount_b {
+                    (amount_a, optimal_b)
+                } else {
+                    let optimal_a = amount_b
+                        .checked_mul(&pool.reserve_a)
+                        .ok_or(Error::<T>::Overflow)?
+                        .checked_div(&pool.reserve_b)
+                        .ok_or(Error::<T>::InsufficientLiquidity)?;
+                    (optimal_a, amount_b)
+                };
+
+                let share_a = actual_a
                     .checked_mul(&total_shares)
                     .ok_or(Error::<T>::Overflow)?
                     .checked_div(&pool.reserve_a)
                     .ok_or(Error::<T>::InsufficientLiquidity)?;
-                let share_b = amount_b
+                let share_b = actual_b
                     .checked_mul(&total_shares)
                     .ok_or(Error::<T>::Overflow)?
                     .checked_div(&pool.reserve_b)
                     .ok_or(Error::<T>::InsufficientLiquidity)?;
-                if share_a < share_b { share_a } else { share_b }
+                let shares = if share_a < share_b { share_a } else { share_b };
+
+                (actual_a, actual_b, shares, shares)
             };
 
-            ensure!(shares > Zero::zero(), Error::<T>::ZeroAmount);
+            ensure!(shares_to_mint > Zero::zero(), Error::<T>::ZeroAmount);
+
+            // Finding 7: enforce slippage on the actual (possibly adjusted) amounts.
+            ensure!(actual_a >= amount_a_min, Error::<T>::SlippageExceeded);
+            ensure!(actual_b >= amount_b_min, Error::<T>::SlippageExceeded);
 
             T::Assets::transfer(
-                asset_a.clone(),
+                pair.0.clone(),
                 &who,
                 &pool.pool_account,
-                amount_a,
+                actual_a,
                 Expendable,
             )?;
             T::Assets::transfer(
-                asset_b.clone(),
+                pair.1.clone(),
                 &who,
                 &pool.pool_account,
-                amount_b,
+                actual_b,
                 Expendable,
             )?;
 
             pool.reserve_a =
-                pool.reserve_a.checked_add(&amount_a).ok_or(Error::<T>::Overflow)?;
+                pool.reserve_a.checked_add(&actual_a).ok_or(Error::<T>::Overflow)?;
             pool.reserve_b =
-                pool.reserve_b.checked_add(&amount_b).ok_or(Error::<T>::Overflow)?;
-            Pools::<T>::insert(&pair, pool);
+                pool.reserve_b.checked_add(&actual_b).ok_or(Error::<T>::Overflow)?;
+            Pools::<T>::insert(&pair, &pool);
 
             let new_total =
-                total_shares.checked_add(&shares).ok_or(Error::<T>::Overflow)?;
+                total_shares.checked_add(&total_new_shares).ok_or(Error::<T>::Overflow)?;
             TotalLiquidity::<T>::insert(&pair, new_total);
 
             let current_block = frame_system::Pallet::<T>::block_number();
@@ -346,15 +412,15 @@ pub mod pallet {
                 |maybe_pos| -> DispatchResult {
                     match maybe_pos {
                         Some(pos) => {
+                            // Finding 9: keep original entry_block on top-up.
                             pos.shares = pos
                                 .shares
-                                .checked_add(&shares)
+                                .checked_add(&shares_to_mint)
                                 .ok_or(Error::<T>::Overflow)?;
-                            pos.entry_block = current_block;
                         },
                         None => {
                             *maybe_pos = Some(LiquidityPosition {
-                                shares,
+                                shares: shares_to_mint,
                                 entry_block: current_block,
                                 locked_until: None,
                             });
@@ -366,11 +432,11 @@ pub mod pallet {
 
             Self::deposit_event(Event::LiquidityAdded {
                 provider: who,
-                asset_a,
-                asset_b,
-                amount_a,
-                amount_b,
-                shares_minted: shares,
+                asset_a: pair.0,
+                asset_b: pair.1,
+                amount_a: actual_a,
+                amount_b: actual_b,
+                shares_minted: shares_to_mint,
             });
             Ok(())
         }
@@ -390,8 +456,13 @@ pub mod pallet {
 
             ensure!(shares > Zero::zero(), Error::<T>::ZeroAmount);
 
-            let pair = (asset_a.clone(), asset_b.clone());
+            // Finding 5: canonicalize pair.
+            let pair = Self::canonical_pair(asset_a, asset_b);
             let mut pool = Pools::<T>::get(&pair).ok_or(Error::<T>::PoolNotFound)?;
+
+            // Finding 2: sync reserves from actual balances before computing withdrawal.
+            Self::sync_reserves(&pair, &mut pool);
+
             let total_shares =
                 TotalLiquidity::<T>::get(&pair).ok_or(Error::<T>::PoolNotFound)?;
             ensure!(!total_shares.is_zero(), Error::<T>::InsufficientLiquidity);
@@ -400,6 +471,7 @@ pub mod pallet {
                 .ok_or(Error::<T>::InsufficientShares)?;
             ensure!(position.shares >= shares, Error::<T>::InsufficientShares);
 
+            // Finding 10: enforce lock check.
             if let Some(until) = position.locked_until {
                 let current = frame_system::Pallet::<T>::block_number();
                 ensure!(current >= until, Error::<T>::PoolLocked);
@@ -420,14 +492,14 @@ pub mod pallet {
             ensure!(amount_b >= amount_b_min, Error::<T>::SlippageExceeded);
 
             T::Assets::transfer(
-                asset_a.clone(),
+                pair.0.clone(),
                 &pool.pool_account,
                 &who,
                 amount_a,
                 Expendable,
             )?;
             T::Assets::transfer(
-                asset_b.clone(),
+                pair.1.clone(),
                 &pool.pool_account,
                 &who,
                 amount_b,
@@ -458,8 +530,8 @@ pub mod pallet {
 
             Self::deposit_event(Event::LiquidityRemoved {
                 provider: who,
-                asset_a,
-                asset_b,
+                asset_a: pair.0,
+                asset_b: pair.1,
                 amount_a,
                 amount_b,
                 shares_burned: shares,
@@ -482,19 +554,19 @@ pub mod pallet {
 
             ensure!(amount_in > Zero::zero(), Error::<T>::ZeroAmount);
 
-            // The pool is stored under a single canonical ordering; look up both.
-            let (pair, flipped) =
-                if Pools::<T>::contains_key(&(asset_in.clone(), asset_out.clone())) {
-                    ((asset_in.clone(), asset_out.clone()), false)
-                } else if Pools::<T>::contains_key(&(asset_out.clone(), asset_in.clone())) {
-                    ((asset_out.clone(), asset_in.clone()), true)
-                } else {
-                    return Err(Error::<T>::PoolNotFound.into());
-                };
-
+            // Finding 5: canonicalize pair for lookup.
+            let pair = Self::canonical_pair(asset_in.clone(), asset_out.clone());
             let mut pool = Pools::<T>::get(&pair).ok_or(Error::<T>::PoolNotFound)?;
-            let (reserve_in, reserve_out) =
-                if flipped { (pool.reserve_b, pool.reserve_a) } else { (pool.reserve_a, pool.reserve_b) };
+
+            // Finding 2: sync reserves from actual on-chain balances.
+            Self::sync_reserves(&pair, &mut pool);
+
+            let flipped = pair.0.encode() != asset_in.encode();
+            let (reserve_in, reserve_out) = if flipped {
+                (pool.reserve_b, pool.reserve_a)
+            } else {
+                (pool.reserve_a, pool.reserve_b)
+            };
 
             ensure!(
                 !reserve_in.is_zero() && !reserve_out.is_zero(),
@@ -540,16 +612,22 @@ pub mod pallet {
                 Expendable,
             )?;
 
+            // Finding 3: only add amount_in_after_fee to reserves; the fee stays in
+            // the pool account but is not counted in reserves until the next sync.
             if flipped {
-                pool.reserve_b =
-                    pool.reserve_b.checked_add(&amount_in).ok_or(Error::<T>::Overflow)?;
+                pool.reserve_b = pool
+                    .reserve_b
+                    .checked_add(&amount_in_after_fee)
+                    .ok_or(Error::<T>::Overflow)?;
                 pool.reserve_a = pool
                     .reserve_a
                     .checked_sub(&amount_out)
                     .ok_or(Error::<T>::InsufficientLiquidity)?;
             } else {
-                pool.reserve_a =
-                    pool.reserve_a.checked_add(&amount_in).ok_or(Error::<T>::Overflow)?;
+                pool.reserve_a = pool
+                    .reserve_a
+                    .checked_add(&amount_in_after_fee)
+                    .ok_or(Error::<T>::Overflow)?;
                 pool.reserve_b = pool
                     .reserve_b
                     .checked_sub(&amount_out)
@@ -559,6 +637,8 @@ pub mod pallet {
                 .total_fees_collected
                 .checked_add(&fee)
                 .ok_or(Error::<T>::Overflow)?;
+
+            let pool_account_for_event = pool.pool_account.clone();
             Pools::<T>::insert(&pair, pool);
 
             Self::deposit_event(Event::SwapExecuted {
@@ -569,6 +649,48 @@ pub mod pallet {
                 amount_out,
                 fee,
             });
+
+            // Finding 11: emit FeesCollected event.
+            Self::deposit_event(Event::FeesCollected {
+                pool: pair,
+                amount: fee,
+                recipient: pool_account_for_event,
+            });
+
+            Ok(())
+        }
+
+        /// Lock a liquidity position until a given block.
+        ///
+        /// Finding 10: activates the previously dead `locked_until` field.
+        #[pallet::call_index(4)]
+        #[pallet::weight(Weight::from_parts(50_000_000, 5_000))]
+        pub fn lock_liquidity(
+            origin: OriginFor<T>,
+            asset_a: T::AssetKind,
+            asset_b: T::AssetKind,
+            lock_until: BlockNumberFor<T>,
+        ) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+
+            let pair = Self::canonical_pair(asset_a, asset_b);
+
+            LiquidityPositions::<T>::try_mutate(
+                &who,
+                &pair,
+                |maybe_pos| -> DispatchResult {
+                    let pos = maybe_pos.as_mut().ok_or(Error::<T>::InsufficientShares)?;
+                    pos.locked_until = Some(lock_until);
+                    Ok(())
+                },
+            )?;
+
+            Self::deposit_event(Event::LiquidityLocked {
+                who,
+                pool: pair,
+                locked_until: lock_until,
+            });
+
             Ok(())
         }
     }
@@ -578,17 +700,48 @@ pub mod pallet {
         pub fn account_id() -> T::AccountId {
             AccountIdConversion::<T::AccountId>::into_account_truncating(&PALLET_ID)
         }
+
+        /// Finding 5: canonicalize a pair so that the lexicographically smaller
+        /// encoded asset comes first. Prevents duplicate pools for (A,B) vs (B,A).
+        pub fn canonical_pair(
+            a: T::AssetKind,
+            b: T::AssetKind,
+        ) -> (T::AssetKind, T::AssetKind) {
+            if a.encode() <= b.encode() {
+                (a, b)
+            } else {
+                (b, a)
+            }
+        }
+
+        /// Finding 2: sync pool reserves from actual on-chain asset balances.
+        /// Absorbs any direct transfers or previously uncounted fees into the
+        /// reserve tracking so the AMM math operates on accurate figures.
+        fn sync_reserves(
+            pair: &(T::AssetKind, T::AssetKind),
+            pool: &mut PoolInfo<T::Balance, T::AccountId>,
+        ) {
+            pool.reserve_a = T::Assets::balance(pair.0.clone(), &pool.pool_account);
+            pool.reserve_b = T::Assets::balance(pair.1.clone(), &pool.pool_account);
+        }
     }
 }
 
+/// Finding 12: energy hooks now persist cumulative counters.
 impl<T: Config> OnEnergySell<T::Balance> for Pallet<T> {
     fn on_energy_sell(amount: T::Balance) {
+        TotalEnergySold::<T>::mutate(|total| {
+            *total = total.checked_add(&amount).unwrap_or(*total);
+        });
         Self::deposit_event(Event::EnergySold { amount });
     }
 }
 
 impl<T: Config> OnEnergyBurn<T::Balance> for Pallet<T> {
     fn on_energy_burn(amount: T::Balance) {
+        TotalEnergyBurned::<T>::mutate(|total| {
+            *total = total.checked_add(&amount).unwrap_or(*total);
+        });
         Self::deposit_event(Event::EnergyBurned { amount });
     }
 }
