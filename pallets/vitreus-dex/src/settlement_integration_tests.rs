@@ -432,3 +432,492 @@ fn fill_commitments_storage_is_empty_after_registration() {
         assert!(FillCommitments::<Test>::iter().next().is_none());
     });
 }
+
+// ============================================================================
+// Part 2c: fill lifecycle (commit → settle / slash / expire)
+// ============================================================================
+
+use crate::settlement::{REPUTATION_FILL_REWARD, REPUTATION_SLASH_PENALTY};
+
+/// Create a native↔USDC pool and seed it with 500_000 of each from ALICE.
+/// Fee tier = 10 (1%), matching the pallet's whitelisted tiers.
+fn setup_pool_native_usdc() {
+    assert_ok!(VitreusDex::create_pool(
+        RuntimeOrigin::root(),
+        NativeOrAssetId::Native,
+        usdc(),
+        10,
+    ));
+    assert_ok!(VitreusDex::add_liquidity(
+        RuntimeOrigin::signed(ALICE),
+        NativeOrAssetId::Native,
+        usdc(),
+        500_000,
+        500_000,
+        0,
+        0,
+    ));
+}
+
+// ----------------------------------------------------------------------------
+// commit_fill
+// ----------------------------------------------------------------------------
+
+#[test]
+fn commit_fill_marks_intent_committed_and_increments_active() {
+    new_test_ext().execute_with(|| {
+        let solver_id = register_solver_for(BOB);
+        assert_ok!(VitreusDex::submit_intent(
+            RuntimeOrigin::signed(ALICE),
+            usdc(),
+            NativeOrAssetId::Native,
+            10_000,
+            9_000,
+            System::block_number() + 100,
+        ));
+
+        assert_ok!(VitreusDex::commit_fill(
+            RuntimeOrigin::signed(BOB),
+            0,
+            9_500,
+        ));
+
+        let intent = Intents::<Test>::get(0).expect("present");
+        assert_eq!(intent.status, IntentStatus::Committed);
+
+        let commitment = FillCommitments::<Test>::get(0).expect("present");
+        assert_eq!(commitment.solver_id, solver_id);
+        assert_eq!(commitment.committed_amount_out, 9_500);
+
+        let solver = Solvers::<Test>::get(solver_id).expect("present");
+        assert_eq!(solver.active_commitments, 1);
+    });
+}
+
+#[test]
+fn commit_fill_rejects_below_min_amount_out() {
+    new_test_ext().execute_with(|| {
+        register_solver_for(BOB);
+        assert_ok!(VitreusDex::submit_intent(
+            RuntimeOrigin::signed(ALICE),
+            usdc(),
+            NativeOrAssetId::Native,
+            10_000,
+            9_000,
+            System::block_number() + 100,
+        ));
+
+        assert_noop!(
+            VitreusDex::commit_fill(RuntimeOrigin::signed(BOB), 0, 8_000),
+            Error::<Test>::BelowMinAmountOut,
+        );
+    });
+}
+
+#[test]
+fn commit_fill_rejects_unregistered_solver() {
+    new_test_ext().execute_with(|| {
+        assert_ok!(VitreusDex::submit_intent(
+            RuntimeOrigin::signed(ALICE),
+            usdc(),
+            NativeOrAssetId::Native,
+            10_000,
+            9_000,
+            System::block_number() + 100,
+        ));
+
+        assert_noop!(
+            VitreusDex::commit_fill(RuntimeOrigin::signed(BOB), 0, 9_500),
+            Error::<Test>::SolverNotRegistered,
+        );
+    });
+}
+
+#[test]
+fn commit_fill_overbid_replaces_prior_and_fixes_active_counts() {
+    new_test_ext().execute_with(|| {
+        register_solver_for(BOB);
+        register_solver_for(CHARLIE);
+        assert_ok!(VitreusDex::submit_intent(
+            RuntimeOrigin::signed(ALICE),
+            usdc(),
+            NativeOrAssetId::Native,
+            10_000,
+            9_000,
+            System::block_number() + 100,
+        ));
+
+        assert_ok!(VitreusDex::commit_fill(RuntimeOrigin::signed(BOB), 0, 9_500));
+        assert_ok!(VitreusDex::commit_fill(RuntimeOrigin::signed(CHARLIE), 0, 9_700));
+
+        let commitment = FillCommitments::<Test>::get(0).expect("present");
+        assert_eq!(commitment.committed_amount_out, 9_700);
+        assert_eq!(commitment.solver_account, CHARLIE);
+
+        let bob = Solvers::<Test>::get(0).expect("present");
+        let charlie = Solvers::<Test>::get(1).expect("present");
+        assert_eq!(bob.active_commitments, 0);
+        assert_eq!(charlie.active_commitments, 1);
+    });
+}
+
+#[test]
+fn commit_fill_rejects_overbid_not_strictly_better() {
+    new_test_ext().execute_with(|| {
+        register_solver_for(BOB);
+        register_solver_for(CHARLIE);
+        assert_ok!(VitreusDex::submit_intent(
+            RuntimeOrigin::signed(ALICE),
+            usdc(),
+            NativeOrAssetId::Native,
+            10_000,
+            9_000,
+            System::block_number() + 100,
+        ));
+
+        assert_ok!(VitreusDex::commit_fill(RuntimeOrigin::signed(BOB), 0, 9_500));
+        assert_noop!(
+            VitreusDex::commit_fill(RuntimeOrigin::signed(CHARLIE), 0, 9_500),
+            Error::<Test>::BidNotBetter,
+        );
+    });
+}
+
+#[test]
+fn commit_fill_rejects_past_bid_window() {
+    new_test_ext().execute_with(|| {
+        register_solver_for(BOB);
+        assert_ok!(VitreusDex::submit_intent(
+            RuntimeOrigin::signed(ALICE),
+            usdc(),
+            NativeOrAssetId::Native,
+            10_000,
+            9_000,
+            System::block_number() + 100,
+        ));
+
+        // Default bid window is 10 blocks (mock DefaultBidWindowBlocks = 10).
+        // Submitted at block 1; deadline block 11. Advance to 12.
+        let now = System::block_number();
+        System::set_block_number(now + 11);
+
+        assert_noop!(
+            VitreusDex::commit_fill(RuntimeOrigin::signed(BOB), 0, 9_500),
+            Error::<Test>::BidWindowClosed,
+        );
+    });
+}
+
+// ----------------------------------------------------------------------------
+// settle_intent
+// ----------------------------------------------------------------------------
+
+#[test]
+fn settle_intent_happy_path_distributes_correctly() {
+    new_test_ext().execute_with(|| {
+        setup_pool_native_usdc();
+        register_solver_for(BOB);
+
+        assert_ok!(VitreusDex::submit_intent(
+            RuntimeOrigin::signed(ALICE),
+            usdc(),
+            NativeOrAssetId::Native,
+            10_000,
+            9_000,
+            System::block_number() + 100,
+        ));
+        assert_ok!(VitreusDex::commit_fill(RuntimeOrigin::signed(BOB), 0, 9_500));
+
+        let alice_native_before = pallet_balances::Pallet::<Test>::free_balance(ALICE);
+
+        assert_ok!(VitreusDex::settle_intent(RuntimeOrigin::signed(BOB), 0));
+
+        let intent = Intents::<Test>::get(0).expect("present");
+        assert_eq!(intent.status, IntentStatus::Settled);
+        assert!(FillCommitments::<Test>::get(0).is_none());
+        assert!(IntentEscrowBalances::<Test>::get(0).is_none());
+
+        // User gets exactly committed_amount_out.
+        let alice_native_after = pallet_balances::Pallet::<Test>::free_balance(ALICE);
+        assert_eq!(alice_native_after - alice_native_before, 9_500);
+
+        // Solver bookkeeping.
+        let bob = Solvers::<Test>::get(0).expect("present");
+        assert_eq!(bob.reputation, REPUTATION_FILL_REWARD);
+        assert_eq!(bob.fills_completed, 1);
+        assert_eq!(bob.active_commitments, 0);
+    });
+}
+
+#[test]
+fn settle_intent_rejects_non_committed_solver() {
+    new_test_ext().execute_with(|| {
+        setup_pool_native_usdc();
+        register_solver_for(BOB);
+        register_solver_for(CHARLIE);
+
+        assert_ok!(VitreusDex::submit_intent(
+            RuntimeOrigin::signed(ALICE),
+            usdc(),
+            NativeOrAssetId::Native,
+            10_000,
+            9_000,
+            System::block_number() + 100,
+        ));
+        assert_ok!(VitreusDex::commit_fill(RuntimeOrigin::signed(BOB), 0, 9_500));
+
+        assert_noop!(
+            VitreusDex::settle_intent(RuntimeOrigin::signed(CHARLIE), 0),
+            Error::<Test>::NotCommittedSolver,
+        );
+    });
+}
+
+#[test]
+fn settle_intent_rejects_past_settlement_window() {
+    new_test_ext().execute_with(|| {
+        setup_pool_native_usdc();
+        register_solver_for(BOB);
+        assert_ok!(VitreusDex::submit_intent(
+            RuntimeOrigin::signed(ALICE),
+            usdc(),
+            NativeOrAssetId::Native,
+            10_000,
+            9_000,
+            System::block_number() + 100,
+        ));
+        assert_ok!(VitreusDex::commit_fill(RuntimeOrigin::signed(BOB), 0, 9_500));
+
+        // Default settlement window is 5 blocks.
+        let now = System::block_number();
+        System::set_block_number(now + 6);
+
+        assert_noop!(
+            VitreusDex::settle_intent(RuntimeOrigin::signed(BOB), 0),
+            Error::<Test>::SettlementWindowPassed,
+        );
+    });
+}
+
+// ----------------------------------------------------------------------------
+// slash_solver
+// ----------------------------------------------------------------------------
+
+#[test]
+fn slash_solver_happy_path_pays_slasher_and_refunds_user() {
+    new_test_ext().execute_with(|| {
+        register_solver_for(BOB);
+        assert_ok!(VitreusDex::submit_intent(
+            RuntimeOrigin::signed(ALICE),
+            usdc(),
+            NativeOrAssetId::Native,
+            10_000,
+            9_000,
+            System::block_number() + 100,
+        ));
+        assert_ok!(VitreusDex::commit_fill(RuntimeOrigin::signed(BOB), 0, 9_500));
+
+        let alice_usdc_before = pallet_assets::Pallet::<Test>::balance(USDC_ID, &ALICE);
+        let charlie_native_before = pallet_balances::Pallet::<Test>::free_balance(CHARLIE);
+
+        let now = System::block_number();
+        System::set_block_number(now + 10);
+
+        assert_ok!(VitreusDex::slash_solver(RuntimeOrigin::signed(CHARLIE), 0));
+
+        let bob = Solvers::<Test>::get(0).expect("present");
+        assert!(!bob.active);
+        assert_eq!(bob.bond, 0);
+        assert_eq!(bob.reputation, REPUTATION_SLASH_PENALTY);
+        assert_eq!(bob.fills_slashed, 1);
+        assert_eq!(bob.active_commitments, 0);
+
+        let alice_usdc_after = pallet_assets::Pallet::<Test>::balance(USDC_ID, &ALICE);
+        assert_eq!(alice_usdc_after - alice_usdc_before, 10_000);
+
+        // 10% of 1_000_000_000_000 bond.
+        let charlie_native_after = pallet_balances::Pallet::<Test>::free_balance(CHARLIE);
+        assert_eq!(charlie_native_after - charlie_native_before, 100_000_000_000);
+
+        let intent = Intents::<Test>::get(0).expect("present");
+        assert_eq!(intent.status, IntentStatus::Expired);
+    });
+}
+
+#[test]
+fn slash_solver_rejects_before_settlement_window_passes() {
+    new_test_ext().execute_with(|| {
+        register_solver_for(BOB);
+        assert_ok!(VitreusDex::submit_intent(
+            RuntimeOrigin::signed(ALICE),
+            usdc(),
+            NativeOrAssetId::Native,
+            10_000,
+            9_000,
+            System::block_number() + 100,
+        ));
+        assert_ok!(VitreusDex::commit_fill(RuntimeOrigin::signed(BOB), 0, 9_500));
+
+        assert_noop!(
+            VitreusDex::slash_solver(RuntimeOrigin::signed(CHARLIE), 0),
+            Error::<Test>::SettlementWindowNotPassed,
+        );
+    });
+}
+
+#[test]
+fn slash_solver_rejects_if_already_settled() {
+    new_test_ext().execute_with(|| {
+        setup_pool_native_usdc();
+        register_solver_for(BOB);
+        assert_ok!(VitreusDex::submit_intent(
+            RuntimeOrigin::signed(ALICE),
+            usdc(),
+            NativeOrAssetId::Native,
+            10_000,
+            9_000,
+            System::block_number() + 100,
+        ));
+        assert_ok!(VitreusDex::commit_fill(RuntimeOrigin::signed(BOB), 0, 9_500));
+        assert_ok!(VitreusDex::settle_intent(RuntimeOrigin::signed(BOB), 0));
+
+        let now = System::block_number();
+        System::set_block_number(now + 10);
+
+        assert_noop!(
+            VitreusDex::slash_solver(RuntimeOrigin::signed(CHARLIE), 0),
+            Error::<Test>::IntentNotCommitted,
+        );
+    });
+}
+
+// ----------------------------------------------------------------------------
+// refund_expired_intent
+// ----------------------------------------------------------------------------
+
+#[test]
+fn refund_expired_intent_works_if_never_committed() {
+    new_test_ext().execute_with(|| {
+        assert_ok!(VitreusDex::submit_intent(
+            RuntimeOrigin::signed(ALICE),
+            usdc(),
+            NativeOrAssetId::Native,
+            10_000,
+            9_000,
+            System::block_number() + 5,
+        ));
+
+        let alice_usdc_before = pallet_assets::Pallet::<Test>::balance(USDC_ID, &ALICE);
+
+        System::set_block_number(System::block_number() + 10);
+
+        assert_ok!(VitreusDex::refund_expired_intent(RuntimeOrigin::signed(ALICE), 0));
+
+        let alice_usdc_after = pallet_assets::Pallet::<Test>::balance(USDC_ID, &ALICE);
+        assert_eq!(alice_usdc_after - alice_usdc_before, 10_000);
+
+        let intent = Intents::<Test>::get(0).expect("present");
+        assert_eq!(intent.status, IntentStatus::Expired);
+    });
+}
+
+#[test]
+fn refund_expired_intent_rejects_if_committed() {
+    new_test_ext().execute_with(|| {
+        register_solver_for(BOB);
+        assert_ok!(VitreusDex::submit_intent(
+            RuntimeOrigin::signed(ALICE),
+            usdc(),
+            NativeOrAssetId::Native,
+            10_000,
+            9_000,
+            System::block_number() + 5,
+        ));
+        assert_ok!(VitreusDex::commit_fill(RuntimeOrigin::signed(BOB), 0, 9_500));
+
+        System::set_block_number(System::block_number() + 10);
+
+        assert_noop!(
+            VitreusDex::refund_expired_intent(RuntimeOrigin::signed(ALICE), 0),
+            Error::<Test>::IntentNotOpen,
+        );
+    });
+}
+
+#[test]
+fn refund_expired_intent_rejects_non_owner() {
+    new_test_ext().execute_with(|| {
+        assert_ok!(VitreusDex::submit_intent(
+            RuntimeOrigin::signed(ALICE),
+            usdc(),
+            NativeOrAssetId::Native,
+            10_000,
+            9_000,
+            System::block_number() + 5,
+        ));
+
+        System::set_block_number(System::block_number() + 10);
+
+        assert_noop!(
+            VitreusDex::refund_expired_intent(RuntimeOrigin::signed(BOB), 0),
+            Error::<Test>::NotIntentOwner,
+        );
+    });
+}
+
+#[test]
+fn refund_expired_intent_rejects_before_deadline() {
+    new_test_ext().execute_with(|| {
+        assert_ok!(VitreusDex::submit_intent(
+            RuntimeOrigin::signed(ALICE),
+            usdc(),
+            NativeOrAssetId::Native,
+            10_000,
+            9_000,
+            System::block_number() + 100,
+        ));
+
+        assert_noop!(
+            VitreusDex::refund_expired_intent(RuntimeOrigin::signed(ALICE), 0),
+            Error::<Test>::DeadlineNotPassed,
+        );
+    });
+}
+
+// ----------------------------------------------------------------------------
+// End-to-end
+// ----------------------------------------------------------------------------
+
+#[test]
+fn end_to_end_two_solvers_overbid_settle() {
+    new_test_ext().execute_with(|| {
+        setup_pool_native_usdc();
+        register_solver_for(BOB);
+        register_solver_for(CHARLIE);
+
+        assert_ok!(VitreusDex::submit_intent(
+            RuntimeOrigin::signed(ALICE),
+            usdc(),
+            NativeOrAssetId::Native,
+            10_000,
+            9_000,
+            System::block_number() + 100,
+        ));
+
+        assert_ok!(VitreusDex::commit_fill(RuntimeOrigin::signed(BOB), 0, 9_200));
+        assert_ok!(VitreusDex::commit_fill(RuntimeOrigin::signed(CHARLIE), 0, 9_600));
+
+        assert_noop!(
+            VitreusDex::settle_intent(RuntimeOrigin::signed(BOB), 0),
+            Error::<Test>::NotCommittedSolver,
+        );
+        assert_ok!(VitreusDex::settle_intent(RuntimeOrigin::signed(CHARLIE), 0));
+
+        let charlie = Solvers::<Test>::get(1).expect("present");
+        assert_eq!(charlie.reputation, REPUTATION_FILL_REWARD);
+        assert_eq!(charlie.fills_completed, 1);
+
+        let bob = Solvers::<Test>::get(0).expect("present");
+        assert_eq!(bob.active_commitments, 0);
+    });
+}

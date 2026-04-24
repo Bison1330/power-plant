@@ -14,6 +14,7 @@ type Block = frame_system::mocking::MockBlock<Test>;
 
 pub const ALICE: u128 = 1;
 pub const BOB: u128 = 2;
+pub const CHARLIE: u128 = 3;
 
 pub const USDC_ID: u32 = 1;
 pub const VNRG_ID: u32 = 2;
@@ -103,7 +104,11 @@ pub(crate) fn new_test_ext() -> sp_io::TestExternalities {
     pallet_balances::GenesisConfig::<Test> {
         // 10× the default solver bond (1e12) so tests can run register +
         // deregister + re-register flows without hitting ED or balance limits.
-        balances: vec![(ALICE, 10_000_000_000_000), (BOB, 10_000_000_000_000)],
+        balances: vec![
+            (ALICE, 10_000_000_000_000),
+            (BOB, 10_000_000_000_000),
+            (CHARLIE, 10_000_000_000_000),
+        ],
     }
     .assimilate_storage(&mut t)
     .unwrap();
@@ -113,8 +118,10 @@ pub(crate) fn new_test_ext() -> sp_io::TestExternalities {
         accounts: vec![
             (USDC_ID, ALICE, 1_000_000),
             (USDC_ID, BOB, 1_000_000),
+            (USDC_ID, CHARLIE, 1_000_000),
             (VNRG_ID, ALICE, 1_000_000),
             (VNRG_ID, BOB, 1_000_000),
+            (VNRG_ID, CHARLIE, 1_000_000),
         ],
         ..Default::default()
     }

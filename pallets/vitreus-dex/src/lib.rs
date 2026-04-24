@@ -2,6 +2,30 @@
 //!
 //! A native AMM DEX pallet for the Vitreus blockchain. Scaffolded to mirror the
 //! structure of `pallet-energy-broker`. Pallet index: 43. PalletId: `vtrs/dex`.
+//!
+//! # Part 3 integration notes (runtime wiring)
+//!
+//! When wiring this pallet into `runtime/vitreus/src/lib.rs`:
+//!
+//! 1. **Pallet index 43** — confirmed free between `DynamicEnergy = 42` and
+//!    `Proxy = 44`. Use `VitreusDex: pallet_vitreus_dex = 43`.
+//!
+//! 2. **Energy fee routing** — `pallet_energy_fee` is the runtime's
+//!    `OnChargeTransaction`. Add `RuntimeCall::VitreusDex(..)` to the
+//!    `CallFee::Regular(Self::custom_fee())` match in
+//!    `runtime/vitreus/src/lib.rs` (around the `CustomFee` impl) or leave
+//!    it to the default `weight_fee` branch — decide per governance.
+//!
+//! 3. **`DefaultSolverBondAmount`** — do NOT use the mock value of
+//!    `1_000_000_000_000` in production. VTRS has 18 decimals; use
+//!    `1_000 * UNITS` (= 10^21) or the post-governance agreed value.
+//!
+//! 4. **Same-block bid races** — Vitreus runs BABE with rotational block
+//!    authorship, and `pallet_energy_fee::pay_priority_fee` is a no-op so
+//!    tips can't influence inclusion. Same-block overbidding is
+//!    non-deterministic in ordering but economically sound: the current
+//!    BABE author's mempool view decides which valid bid lands first;
+//!    losers retry next block. No commit-reveal needed.
 
 #![cfg_attr(not(feature = "std"), no_std)]
 #![warn(missing_docs)]
@@ -30,9 +54,9 @@ use scale_info::TypeInfo;
 use sp_runtime::{
     traits::{
         AccountIdConversion, CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, IntegerSquareRoot,
-        Zero,
+        Saturating, Zero,
     },
-    RuntimeDebug,
+    RuntimeDebug, SaturatedConversion,
 };
 use vitreus_runtime_common::{OnEnergyBurn, OnEnergySell};
 
@@ -513,6 +537,8 @@ pub mod pallet {
         ActiveCommitmentsExist,
         /// Deadline is in the past or not far enough in the future.
         InvalidDeadline,
+        /// Deadline has not yet passed; refund is not yet available.
+        DeadlineNotPassed,
         /// Amount parameter is zero or otherwise invalid.
         InvalidAmount,
         /// Swap output did not meet the user's slippage bound.
@@ -1070,6 +1096,376 @@ pub mod pallet {
             Ok(())
         }
 
+        // ---- Solver marketplace: fill lifecycle ----
+
+        /// Commit to fill an open intent at `committed_amount_out`. Must be
+        /// `>=` the intent's `min_amount_out`; if a prior commitment exists,
+        /// the new bid must strictly exceed it (strict-replace overbidding).
+        ///
+        /// Must be called within the bid window
+        /// (`intent.submitted_at + current_bid_window()`). Sets intent
+        /// status to `Committed` and increments the solver's
+        /// `active_commitments` counter. The solver's bond stays in the
+        /// per-solver escrow regardless of commitment state; slashing on
+        /// failed settlement draws against it.
+        #[pallet::call_index(9)]
+        #[pallet::weight(Weight::from_parts(200_000_000, 20_000))]
+        pub fn commit_fill(
+            origin: OriginFor<T>,
+            intent_id: u64,
+            committed_amount_out: T::Balance,
+        ) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+
+            let solver_id = SolverAccountToId::<T>::get(&who)
+                .ok_or(Error::<T>::SolverNotRegistered)?;
+            let mut solver = Solvers::<T>::get(solver_id)
+                .ok_or(Error::<T>::SolverNotRegistered)?;
+            ensure!(solver.active, Error::<T>::SolverNotActive);
+
+            let mut intent = Intents::<T>::get(intent_id)
+                .ok_or(Error::<T>::IntentNotFound)?;
+            ensure!(
+                intent.status == crate::settlement::IntentStatus::Open
+                    || intent.status == crate::settlement::IntentStatus::Committed,
+                Error::<T>::IntentNotOpen,
+            );
+
+            ensure!(
+                committed_amount_out >= intent.min_amount_out,
+                Error::<T>::BelowMinAmountOut,
+            );
+
+            let now = frame_system::Pallet::<T>::block_number();
+            let bid_deadline = intent.submitted_at.saturating_add(Self::current_bid_window());
+            ensure!(now <= bid_deadline, Error::<T>::BidWindowClosed);
+
+            ensure!(now < intent.deadline, Error::<T>::IntentExpired);
+
+            // Strict-replace overbidding. Decrement the displaced solver's
+            // active_commitments; missing lookup is treated as no-op since
+            // the new commit is still valid.
+            if let Some(prior) = FillCommitments::<T>::get(intent_id) {
+                ensure!(
+                    committed_amount_out > prior.committed_amount_out,
+                    Error::<T>::BidNotBetter,
+                );
+                if let Some(mut displaced) = Solvers::<T>::get(prior.solver_id) {
+                    displaced.active_commitments =
+                        displaced.active_commitments.saturating_sub(1);
+                    Solvers::<T>::insert(prior.solver_id, displaced);
+                }
+            }
+
+            let settle_by = now.saturating_add(Self::current_settlement_window());
+            let commitment = crate::settlement::FillCommitment {
+                intent_id,
+                solver_id,
+                solver_account: who.clone(),
+                committed_amount_out,
+                committed_at: now,
+                settle_by,
+            };
+            FillCommitments::<T>::insert(intent_id, commitment);
+
+            solver.active_commitments = solver.active_commitments.saturating_add(1);
+            Solvers::<T>::insert(solver_id, solver);
+
+            intent.status = crate::settlement::IntentStatus::Committed;
+            Intents::<T>::insert(intent_id, intent);
+
+            Self::deposit_event(Event::FillCommitted {
+                intent_id,
+                solver_id,
+                committed_amount_out,
+                settle_by,
+            });
+
+            Ok(())
+        }
+
+        /// Settle a committed intent by executing the swap and distributing
+        /// slippage capture.
+        ///
+        /// Only callable by the committed solver, within the settlement
+        /// window. Calls `do_swap` with the solver's `committed_amount_out`
+        /// as the minimum output; if the AMM can't deliver at least that,
+        /// the whole call rolls back and the commitment remains (solver can
+        /// retry or be slashed after the window).
+        ///
+        /// On success: user gets exactly `committed_amount_out`, treasury
+        /// gets the protocol fee share of profit, solver pockets the rest.
+        #[pallet::call_index(10)]
+        #[pallet::weight(Weight::from_parts(300_000_000, 30_000))]
+        pub fn settle_intent(origin: OriginFor<T>, intent_id: u64) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+
+            let commitment = FillCommitments::<T>::get(intent_id)
+                .ok_or(Error::<T>::IntentNotCommitted)?;
+            ensure!(
+                commitment.solver_account == who,
+                Error::<T>::NotCommittedSolver,
+            );
+
+            let now = frame_system::Pallet::<T>::block_number();
+            ensure!(
+                now <= commitment.settle_by,
+                Error::<T>::SettlementWindowPassed,
+            );
+
+            let mut intent = Intents::<T>::get(intent_id)
+                .ok_or(Error::<T>::IntentNotFound)?;
+            ensure!(
+                intent.status == crate::settlement::IntentStatus::Committed,
+                Error::<T>::IntentNotCommitted,
+            );
+
+            let intent_escrow = Self::intent_escrow_account();
+            let treasury = Self::protocol_treasury_account();
+
+            // Execute swap through do_swap; AMM output lands back in intent_escrow.
+            let actual_out = Self::do_swap(
+                &intent_escrow,
+                intent.token_in.clone(),
+                intent.token_out.clone(),
+                intent.amount_in,
+                commitment.committed_amount_out,
+                &intent_escrow,
+            )?;
+
+            // Slippage capture: do_swap guarantees actual_out >= committed_amount_out.
+            let profit = actual_out.saturating_sub(commitment.committed_amount_out);
+
+            let profit_u128: u128 = profit.saturated_into::<u128>();
+            let (net_profit_u128, protocol_fee_u128) =
+                crate::settlement::split_solver_profit_u128(
+                    profit_u128,
+                    crate::settlement::SOLVER_PROFIT_FEE_BPS,
+                );
+            let net_profit: T::Balance = net_profit_u128.saturated_into();
+            let protocol_fee: T::Balance = protocol_fee_u128.saturated_into();
+
+            // Deliver committed amount to user.
+            T::Assets::transfer(
+                intent.token_out.clone(),
+                &intent_escrow,
+                &intent.user,
+                commitment.committed_amount_out,
+                Expendable,
+            )
+            .map_err(|_| Error::<T>::InvalidAmount)?;
+
+            if !protocol_fee.is_zero() {
+                T::Assets::transfer(
+                    intent.token_out.clone(),
+                    &intent_escrow,
+                    &treasury,
+                    protocol_fee,
+                    Expendable,
+                )
+                .map_err(|_| Error::<T>::InvalidAmount)?;
+            }
+
+            if !net_profit.is_zero() {
+                T::Assets::transfer(
+                    intent.token_out.clone(),
+                    &intent_escrow,
+                    &who,
+                    net_profit,
+                    Expendable,
+                )
+                .map_err(|_| Error::<T>::InvalidAmount)?;
+            }
+
+            IntentEscrowBalances::<T>::remove(intent_id);
+            intent.status = crate::settlement::IntentStatus::Settled;
+            Intents::<T>::insert(intent_id, intent.clone());
+            FillCommitments::<T>::remove(intent_id);
+
+            if let Some(mut solver) = Solvers::<T>::get(commitment.solver_id) {
+                solver.reputation = solver
+                    .reputation
+                    .saturating_add(crate::settlement::REPUTATION_FILL_REWARD);
+                solver.fills_completed = solver.fills_completed.saturating_add(1);
+                solver.active_commitments = solver.active_commitments.saturating_sub(1);
+                Solvers::<T>::insert(commitment.solver_id, solver);
+            }
+
+            Self::deposit_event(Event::IntentSettled {
+                intent_id,
+                solver_id: commitment.solver_id,
+                user: intent.user,
+                amount_out_to_user: commitment.committed_amount_out,
+                solver_net_profit: net_profit,
+                protocol_fee,
+            });
+
+            Ok(())
+        }
+
+        /// Slash a solver that failed to settle within the settlement window.
+        /// Permissionless — anyone can call once `settle_by` has passed. The
+        /// caller receives `SLASHER_REWARD_BPS` of the bond; the rest goes
+        /// to the protocol treasury. The user's intent is refunded.
+        ///
+        /// After slashing, the solver is marked inactive and must re-register
+        /// with a fresh bond to participate again.
+        #[pallet::call_index(11)]
+        #[pallet::weight(Weight::from_parts(250_000_000, 25_000))]
+        pub fn slash_solver(origin: OriginFor<T>, intent_id: u64) -> DispatchResult {
+            let slasher = ensure_signed(origin)?;
+
+            let commitment = FillCommitments::<T>::get(intent_id)
+                .ok_or(Error::<T>::IntentNotCommitted)?;
+
+            let now = frame_system::Pallet::<T>::block_number();
+            ensure!(
+                now > commitment.settle_by,
+                Error::<T>::SettlementWindowNotPassed,
+            );
+
+            let mut intent = Intents::<T>::get(intent_id)
+                .ok_or(Error::<T>::IntentNotFound)?;
+            ensure!(
+                intent.status == crate::settlement::IntentStatus::Committed,
+                Error::<T>::IntentNotCommitted,
+            );
+
+            let mut solver = Solvers::<T>::get(commitment.solver_id)
+                .ok_or(Error::<T>::SolverNotRegistered)?;
+            let bond = solver.bond;
+
+            let bond_u128: u128 = bond.saturated_into::<u128>();
+            let (to_treasury_u128, to_slasher_u128) =
+                crate::settlement::split_slashed_bond_u128(
+                    bond_u128,
+                    crate::settlement::SLASHER_REWARD_BPS,
+                );
+            let to_treasury: T::Balance = to_treasury_u128.saturated_into();
+            let to_slasher: T::Balance = to_slasher_u128.saturated_into();
+
+            let solver_escrow = Self::solver_escrow_account(commitment.solver_id);
+            let treasury = Self::protocol_treasury_account();
+            let native_asset = T::NativeAsset::get();
+
+            if !to_treasury.is_zero() {
+                T::Assets::transfer(
+                    native_asset.clone(),
+                    &solver_escrow,
+                    &treasury,
+                    to_treasury,
+                    Expendable,
+                )
+                .map_err(|_| Error::<T>::InsufficientBondFunds)?;
+            }
+
+            if !to_slasher.is_zero() {
+                T::Assets::transfer(
+                    native_asset.clone(),
+                    &solver_escrow,
+                    &slasher,
+                    to_slasher,
+                    Expendable,
+                )
+                .map_err(|_| Error::<T>::InsufficientBondFunds)?;
+            }
+
+            // Refund the user.
+            let (escrow_asset, escrow_amount) = IntentEscrowBalances::<T>::get(intent_id)
+                .ok_or(Error::<T>::IntentNotFound)?;
+            let intent_escrow = Self::intent_escrow_account();
+
+            T::Assets::transfer(
+                escrow_asset,
+                &intent_escrow,
+                &intent.user,
+                escrow_amount,
+                Expendable,
+            )
+            .map_err(|_| Error::<T>::InvalidAmount)?;
+
+            IntentEscrowBalances::<T>::remove(intent_id);
+            intent.status = crate::settlement::IntentStatus::Expired;
+            Intents::<T>::insert(intent_id, intent.clone());
+            FillCommitments::<T>::remove(intent_id);
+
+            solver.bond = Zero::zero();
+            solver.reputation = solver
+                .reputation
+                .saturating_add(crate::settlement::REPUTATION_SLASH_PENALTY);
+            solver.fills_slashed = solver.fills_slashed.saturating_add(1);
+            solver.active_commitments = solver.active_commitments.saturating_sub(1);
+            solver.active = false;
+            Solvers::<T>::insert(commitment.solver_id, solver);
+
+            Self::deposit_event(Event::SolverSlashed {
+                solver_id: commitment.solver_id,
+                intent_id,
+                slashed_amount: bond,
+                to_treasury,
+                to_slasher,
+                slasher,
+            });
+
+            Self::deposit_event(Event::IntentRefunded {
+                intent_id,
+                user: intent.user,
+                amount_refunded: escrow_amount,
+            });
+
+            Ok(())
+        }
+
+        /// Refund an intent that expired without ever being committed.
+        /// Callable by the intent owner once the deadline has passed, only
+        /// while the intent is still `Open`. Intents that were committed but
+        /// not settled go through `slash_solver` instead.
+        #[pallet::call_index(12)]
+        #[pallet::weight(Weight::from_parts(150_000_000, 15_000))]
+        pub fn refund_expired_intent(
+            origin: OriginFor<T>,
+            intent_id: u64,
+        ) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+
+            let mut intent = Intents::<T>::get(intent_id)
+                .ok_or(Error::<T>::IntentNotFound)?;
+
+            ensure!(intent.user == who, Error::<T>::NotIntentOwner);
+            ensure!(
+                intent.status == crate::settlement::IntentStatus::Open,
+                Error::<T>::IntentNotOpen,
+            );
+
+            let now = frame_system::Pallet::<T>::block_number();
+            ensure!(now >= intent.deadline, Error::<T>::DeadlineNotPassed);
+
+            let (escrow_asset, escrow_amount) = IntentEscrowBalances::<T>::get(intent_id)
+                .ok_or(Error::<T>::IntentNotFound)?;
+            let intent_escrow = Self::intent_escrow_account();
+
+            T::Assets::transfer(
+                escrow_asset,
+                &intent_escrow,
+                &who,
+                escrow_amount,
+                Expendable,
+            )
+            .map_err(|_| Error::<T>::InvalidAmount)?;
+
+            IntentEscrowBalances::<T>::remove(intent_id);
+            intent.status = crate::settlement::IntentStatus::Expired;
+            Intents::<T>::insert(intent_id, intent);
+
+            Self::deposit_event(Event::IntentRefunded {
+                intent_id,
+                user: who,
+                amount_refunded: escrow_amount,
+            });
+
+            Ok(())
+        }
+
         // ---- Solver marketplace: governance setters ----
 
         /// Update the bid window (in blocks). Gated on `ManageOrigin`.
@@ -1278,13 +1674,11 @@ pub mod pallet {
 
         /// Current bid window. Uses storage value if set, otherwise the
         /// genesis default from `T::DefaultBidWindowBlocks`.
-        #[cfg_attr(not(test), allow(dead_code))]
         pub(crate) fn current_bid_window() -> BlockNumberFor<T> {
             BidWindowBlocks::<T>::get().unwrap_or_else(T::DefaultBidWindowBlocks::get)
         }
 
         /// Current settlement window.
-        #[cfg_attr(not(test), allow(dead_code))]
         pub(crate) fn current_settlement_window() -> BlockNumberFor<T> {
             SettlementWindowBlocks::<T>::get()
                 .unwrap_or_else(T::DefaultSettlementWindowBlocks::get)
@@ -1320,7 +1714,6 @@ pub mod pallet {
         /// Derive the protocol fee treasury account (where the protocol's
         /// share of solver profits accrues). Downstream distribution happens
         /// off this account via a separate sweep extrinsic in a later phase.
-        #[cfg_attr(not(test), allow(dead_code))]
         pub(crate) fn protocol_treasury_account() -> T::AccountId {
             PALLET_ID.into_sub_account_truncating(b"fee_trsy")
         }
