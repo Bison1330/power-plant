@@ -12,6 +12,8 @@ mod mock;
 #[cfg(test)]
 mod tests;
 
+pub mod settlement;
+
 pub use pallet::*;
 
 use frame_support::{
