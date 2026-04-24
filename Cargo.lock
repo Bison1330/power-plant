@@ -7515,6 +7515,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "pallet-vitreus-dex"
+version = "0.1.0"
+dependencies = [
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "impl-trait-for-tuples",
+ "log",
+ "pallet-assets",
+ "pallet-balances",
+ "parity-scale-codec",
+ "primitive-types",
+ "scale-info",
+ "sp-api",
+ "sp-arithmetic",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
+ "sp-std",
+ "vitreus-runtime-common",
+]
+
+[[package]]
 name = "pallet-xcm"
 version = "16.0.2"
 source = "git+https://github.com/paritytech/polkadot-sdk?branch=stable2407#7642d6b5dea6dd7871ef8bbfcb9d48ba8a8b0f77"
@@ -14232,6 +14255,7 @@ dependencies = [
  "pallet-uniques",
  "pallet-utility",
  "pallet-vesting",
+ "pallet-vitreus-dex",
  "pallet-xcm",
  "parity-scale-codec",
  "polkadot-primitives",
