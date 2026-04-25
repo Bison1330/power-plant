@@ -1129,6 +1129,12 @@ impl pallet_energy_broker::Config for Runtime {
     type BurnedEnergySessionsCount = BurnedEnergySessionsCount;
 }
 
+parameter_types! {
+    pub const DefaultBidWindowBlocks: BlockNumber = 10;
+    pub const DefaultSettlementWindowBlocks: BlockNumber = 5;
+    pub const DefaultSolverBondAmount: Balance = 1_000 * UNITS;
+}
+
 impl pallet_vitreus_dex::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type ManageOrigin = EnsureRoot<AccountId>;
@@ -1137,6 +1143,9 @@ impl pallet_vitreus_dex::Config for Runtime {
     type Assets = NativeAndAssets;
     type NativeAsset = NativeAsset;
     type EnergyAsset = VNRG;
+    type DefaultBidWindowBlocks = DefaultBidWindowBlocks;
+    type DefaultSettlementWindowBlocks = DefaultSettlementWindowBlocks;
+    type DefaultSolverBondAmount = DefaultSolverBondAmount;
 }
 
 parameter_types! {
@@ -1301,6 +1310,7 @@ impl CustomFee<RuntimeCall, DispatchInfoOf<RuntimeCall>, Balance, GetConstantEne
             | RuntimeCall::DynamicEnergy(..)
             | RuntimeCall::EnergyGeneration(..)
             | RuntimeCall::EnergyBroker(..)
+            | RuntimeCall::VitreusDex(..)
             | RuntimeCall::Nfts(..)
             | RuntimeCall::AtomicSwap(..)
             | RuntimeCall::Claiming(..)
