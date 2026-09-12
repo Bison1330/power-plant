@@ -89,6 +89,7 @@ impl Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type ManageOrigin = EnsureRoot<u128>;
     type Balance = u128;
+    type HigherPrecisionBalance = sp_core::U256;
     type AssetKind = NativeOrAssetId;
     type Assets = NativeAndAssets;
     type NativeAsset = NativeAsset;

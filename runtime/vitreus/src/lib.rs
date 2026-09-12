@@ -1139,6 +1139,7 @@ impl pallet_vitreus_dex::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type ManageOrigin = EnsureRoot<AccountId>;
     type Balance = Balance;
+    type HigherPrecisionBalance = sp_core::U256;
     type AssetKind = NativeOrAssetId;
     type Assets = NativeAndAssets;
     type NativeAsset = NativeAsset;

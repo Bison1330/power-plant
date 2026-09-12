@@ -508,3 +508,294 @@ fn pool_manager_trait_supports_full_graduation_flow() {
         assert_eq!(TotalLiquidity::<Test>::get(canonical), Some(63_245));
     });
 }
+
+// ============================================================================
+// D1: 18-decimal scale. Reserve products at launchpad seed size
+// (10^22 VTRS × 2·10^26 tokens ≈ 2·10^48) exceed u128::MAX ≈ 3.4·10^38, so
+// every multiply-then-divide in the pool math must go through
+// `HigherPrecisionBalance` (U256). These tests fail with `Error::Overflow`
+// on the pre-D1 u128 arithmetic.
+// ============================================================================
+
+/// Asset id for a launchpad-style 18-decimal token in the mock registry.
+const MEME_ID: u32 = 7;
+/// 10^18 sub-units per whole unit, VTRS and launch tokens alike.
+const UNIT: u128 = 1_000_000_000_000_000_000;
+/// Seed amounts: 10_000 VTRS against 200_000_000 tokens.
+const SEED_NATIVE: u128 = 10_000 * UNIT; // 10^22
+const SEED_TOKEN: u128 = 200_000_000 * UNIT; // 2·10^26
+
+fn meme() -> NativeOrAssetId {
+    NativeOrAssetId::WithId(MEME_ID)
+}
+
+/// Funds ALICE (seeder) and BOB (trader) at 18-decimal scale and creates the
+/// Native/MEME pool at the 0.3% tier. Returns the canonical pair key.
+fn setup_scale_pool() -> (NativeOrAssetId, NativeOrAssetId) {
+    // 10^27 native for the seeder and trader — well above u64 but far below u128::MAX.
+    assert_ok!(Balances::force_set_balance(RuntimeOrigin::root(), ALICE, 1_000_000_000 * UNIT));
+    assert_ok!(Balances::force_set_balance(RuntimeOrigin::root(), BOB, 1_000_000_000 * UNIT));
+    assert_ok!(Assets::force_create(RuntimeOrigin::root(), MEME_ID, ALICE, false, 1));
+    assert_ok!(Assets::mint(RuntimeOrigin::signed(ALICE), MEME_ID, ALICE, 1_000_000_000 * UNIT));
+    assert_ok!(Assets::mint(RuntimeOrigin::signed(ALICE), MEME_ID, BOB, 1_000_000_000 * UNIT));
+    assert_ok!(VitreusDex::create_pool(RuntimeOrigin::root(), native(), meme(), 3));
+    VitreusDex::canonical_pair(native(), meme())
+}
+
+/// Reference: floor(sqrt(a * b)) computed in U256, narrowed.
+fn isqrt_u256(a: u128, b: u128) -> u128 {
+    let p = sp_core::U256::from(a) * sp_core::U256::from(b);
+    let r: sp_core::U256 = p.integer_sqrt();
+    r.try_into().expect("sqrt of a u256 product of two u128 fits u128")
+}
+
+/// Reference: floor(a * b / c) in U256, narrowed.
+fn mul_div_u256(a: u128, b: u128, c: u128) -> u128 {
+    let x = sp_core::U256::from(a) * sp_core::U256::from(b) / sp_core::U256::from(c);
+    x.try_into().expect("reference result fits u128")
+}
+
+#[test]
+fn scale_add_liquidity_first_deposit_at_seed_amounts() {
+    new_test_ext().execute_with(|| {
+        let key = setup_scale_pool();
+
+        // Pre-D1: `amount_a.checked_mul(amount_b)` overflows u128 → Error::Overflow.
+        assert_ok!(VitreusDex::add_liquidity(
+            RuntimeOrigin::signed(ALICE),
+            native(),
+            meme(),
+            SEED_NATIVE,
+            SEED_TOKEN,
+            SEED_NATIVE,
+            SEED_TOKEN,
+        ));
+
+        let expected_total = isqrt_u256(SEED_NATIVE, SEED_TOKEN);
+        assert_eq!(TotalLiquidity::<Test>::get(key.clone()), Some(expected_total));
+        let pos = LiquidityPositions::<Test>::get(ALICE, key.clone()).expect("position");
+        assert_eq!(pos.shares, expected_total - u128::from(crate::MINIMUM_LIQUIDITY));
+
+        let pool = Pools::<Test>::get(key).unwrap();
+        // canonical_pair orders Native before WithId, so reserve_a is VTRS.
+        assert_eq!(pool.reserve_a, SEED_NATIVE);
+        assert_eq!(pool.reserve_b, SEED_TOKEN);
+    });
+}
+
+#[test]
+fn scale_add_liquidity_subsequent_deposit_uses_optimal_amounts() {
+    new_test_ext().execute_with(|| {
+        let key = setup_scale_pool();
+        assert_ok!(VitreusDex::add_liquidity(
+            RuntimeOrigin::signed(ALICE),
+            native(),
+            meme(),
+            SEED_NATIVE,
+            SEED_TOKEN,
+            0,
+            0,
+        ));
+        let total_before = TotalLiquidity::<Test>::get(key.clone()).unwrap();
+
+        // BOB offers 1_000 VTRS and far too many tokens; optimal_b = amount_a * reserve_b / reserve_a.
+        // Pre-D1: `amount_a.checked_mul(&pool.reserve_b)` overflows.
+        let offer_native = 1_000 * UNIT;
+        let offer_token = 100_000_000 * UNIT;
+        let optimal_token = mul_div_u256(offer_native, SEED_TOKEN, SEED_NATIVE);
+        assert!(optimal_token < offer_token);
+
+        let token_before = Assets::balance(MEME_ID, BOB);
+        assert_ok!(VitreusDex::add_liquidity(
+            RuntimeOrigin::signed(BOB),
+            native(),
+            meme(),
+            offer_native,
+            offer_token,
+            offer_native,
+            optimal_token,
+        ));
+        // Only the optimal token amount was pulled (no donation of excess).
+        assert_eq!(token_before - Assets::balance(MEME_ID, BOB), optimal_token);
+
+        // shares = min(actual_a * total / reserve_a, actual_b * total / reserve_b), floored.
+        let share_a = mul_div_u256(offer_native, total_before, SEED_NATIVE);
+        let share_b = mul_div_u256(optimal_token, total_before, SEED_TOKEN);
+        let expected = share_a.min(share_b);
+        let pos = LiquidityPositions::<Test>::get(BOB, key).expect("position");
+        assert_eq!(pos.shares, expected);
+    });
+}
+
+#[test]
+fn scale_swap_native_for_token_at_seed_amounts() {
+    new_test_ext().execute_with(|| {
+        let key = setup_scale_pool();
+        assert_ok!(VitreusDex::add_liquidity(
+            RuntimeOrigin::signed(ALICE),
+            native(),
+            meme(),
+            SEED_NATIVE,
+            SEED_TOKEN,
+            0,
+            0,
+        ));
+
+        // 100 VTRS in at 0.3%: fee = floor(amount_in * 3 / 1000).
+        let amount_in = 100 * UNIT;
+        let fee = amount_in * 3 / 1_000;
+        let after_fee = amount_in - fee;
+        // amount_out = floor(reserve_out * after_fee / (reserve_in + after_fee)).
+        // Pre-D1: `reserve_out.checked_mul(&amount_in_after_fee)` overflows.
+        let expected_out = mul_div_u256(SEED_TOKEN, after_fee, SEED_NATIVE + after_fee);
+        assert!(expected_out > 0);
+
+        let token_before = Assets::balance(MEME_ID, BOB);
+        assert_ok!(VitreusDex::swap_exact_tokens_for_tokens(
+            RuntimeOrigin::signed(BOB),
+            native(),
+            meme(),
+            amount_in,
+            expected_out,
+            BOB,
+        ));
+        assert_eq!(Assets::balance(MEME_ID, BOB) - token_before, expected_out);
+
+        let pool = Pools::<Test>::get(key).unwrap();
+        assert_eq!(pool.reserve_a, SEED_NATIVE + after_fee);
+        assert_eq!(pool.reserve_b, SEED_TOKEN - expected_out);
+        assert_eq!(pool.total_fees_collected, fee);
+
+        // Constant product must not decrease (floor on amount_out favours the pool).
+        let k_before = sp_core::U256::from(SEED_NATIVE) * sp_core::U256::from(SEED_TOKEN);
+        let k_after = sp_core::U256::from(pool.reserve_a) * sp_core::U256::from(pool.reserve_b);
+        assert!(k_after >= k_before);
+    });
+}
+
+#[test]
+fn scale_swap_token_for_native_at_seed_amounts() {
+    new_test_ext().execute_with(|| {
+        let key = setup_scale_pool();
+        assert_ok!(VitreusDex::add_liquidity(
+            RuntimeOrigin::signed(ALICE),
+            native(),
+            meme(),
+            SEED_NATIVE,
+            SEED_TOKEN,
+            0,
+            0,
+        ));
+
+        // 1_000_000 tokens in (0.5% of the token reserve).
+        let amount_in = 1_000_000 * UNIT;
+        let fee = amount_in * 3 / 1_000;
+        let after_fee = amount_in - fee;
+        // Flipped direction: reserve_in is the token side, reserve_out the native side.
+        let expected_out = mul_div_u256(SEED_NATIVE, after_fee, SEED_TOKEN + after_fee);
+        assert!(expected_out > 0);
+
+        let native_before = Balances::free_balance(BOB);
+        assert_ok!(VitreusDex::swap_exact_tokens_for_tokens(
+            RuntimeOrigin::signed(BOB),
+            meme(),
+            native(),
+            amount_in,
+            expected_out,
+            BOB,
+        ));
+        assert_eq!(Balances::free_balance(BOB) - native_before, expected_out);
+
+        let pool = Pools::<Test>::get(key).unwrap();
+        assert_eq!(pool.reserve_a, SEED_NATIVE - expected_out);
+        assert_eq!(pool.reserve_b, SEED_TOKEN + after_fee);
+
+        let k_before = sp_core::U256::from(SEED_NATIVE) * sp_core::U256::from(SEED_TOKEN);
+        let k_after = sp_core::U256::from(pool.reserve_a) * sp_core::U256::from(pool.reserve_b);
+        assert!(k_after >= k_before);
+    });
+}
+
+#[test]
+fn scale_remove_liquidity_at_seed_amounts() {
+    new_test_ext().execute_with(|| {
+        let key = setup_scale_pool();
+        assert_ok!(VitreusDex::add_liquidity(
+            RuntimeOrigin::signed(ALICE),
+            native(),
+            meme(),
+            SEED_NATIVE,
+            SEED_TOKEN,
+            0,
+            0,
+        ));
+        let total = TotalLiquidity::<Test>::get(key.clone()).unwrap();
+        let pos = LiquidityPositions::<Test>::get(ALICE, key.clone()).unwrap();
+        // Withdraw half of ALICE's shares.
+        let shares = pos.shares / 2;
+
+        // amount = floor(shares * reserve / total_shares).
+        // Pre-D1: `shares.checked_mul(&pool.reserve_a)` overflows.
+        let expected_native = mul_div_u256(shares, SEED_NATIVE, total);
+        let expected_token = mul_div_u256(shares, SEED_TOKEN, total);
+
+        let native_before = Balances::free_balance(ALICE);
+        let token_before = Assets::balance(MEME_ID, ALICE);
+        assert_ok!(VitreusDex::remove_liquidity(
+            RuntimeOrigin::signed(ALICE),
+            native(),
+            meme(),
+            shares,
+            expected_native,
+            expected_token,
+        ));
+        assert_eq!(Balances::free_balance(ALICE) - native_before, expected_native);
+        assert_eq!(Assets::balance(MEME_ID, ALICE) - token_before, expected_token);
+
+        let pool = Pools::<Test>::get(key.clone()).unwrap();
+        assert_eq!(pool.reserve_a, SEED_NATIVE - expected_native);
+        assert_eq!(pool.reserve_b, SEED_TOKEN - expected_token);
+        assert_eq!(TotalLiquidity::<Test>::get(key), Some(total - shares));
+    });
+}
+
+#[test]
+fn scale_narrowing_errors_instead_of_truncating() {
+    new_test_ext().execute_with(|| {
+        // The only pool-math result that can exceed u128 after the product is
+        // computed in U256 is the matched deposit amount
+        // `optimal_b = amount_a * reserve_b / reserve_a`, when a depositor offers
+        // far more of asset A than the pool ratio supports. With reserves at
+        // 10^22 : 2·10^26 (ratio 2·10^4) and amount_a = 10^38, optimal_b ≈ 2·10^42
+        // does not fit u128. The narrowing must surface as `Error::Overflow`
+        // and leave state untouched — never truncate to a wrong amount.
+        let key = setup_scale_pool();
+        assert_ok!(VitreusDex::add_liquidity(
+            RuntimeOrigin::signed(ALICE),
+            native(),
+            meme(),
+            SEED_NATIVE,
+            SEED_TOKEN,
+            0,
+            0,
+        ));
+        assert_ok!(Balances::force_set_balance(RuntimeOrigin::root(), BOB, u128::MAX));
+        let huge_native: u128 = 100_000_000_000_000_000_000_000_000_000_000_000_000; // 10^38
+        let total_before = TotalLiquidity::<Test>::get(key.clone()).unwrap();
+
+        assert_noop!(
+            VitreusDex::add_liquidity(
+                RuntimeOrigin::signed(BOB),
+                native(),
+                meme(),
+                huge_native,
+                u128::MAX,
+                0,
+                0,
+            ),
+            Error::<Test>::Overflow
+        );
+        assert_eq!(TotalLiquidity::<Test>::get(key), Some(total_before));
+        assert!(LiquidityPositions::<Test>::get(BOB, VitreusDex::canonical_pair(native(), meme())).is_none());
+    });
+}

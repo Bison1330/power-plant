@@ -139,16 +139,25 @@ pub struct FillCommitment<AccountId, Balance, BlockNumber> {
 // Pure helpers
 // ============================================================================
 
+/// `floor(amount * bps / 10_000)` in wide precision (D1).
+///
+/// The product is computed in `U256` so an `amount` above ~3.4·10^34 no
+/// longer saturates and silently underpays. The result is at most `amount`
+/// and therefore always fits `u128`; the fallback branch is unreachable and
+/// only exists so this helper can never panic.
+fn bps_of_u128(amount: u128, bps: u32) -> u128 {
+    let x = sp_core::U256::from(amount) * sp_core::U256::from(bps) / sp_core::U256::from(10_000u32);
+    u128::try_from(x).unwrap_or(amount)
+}
+
 /// Split a slashed bond between slasher and protocol treasury.
 ///
 /// `slasher_reward_bps` is in basis points of 10_000. Returns
 /// `(to_treasury, to_slasher)`.
 ///
-/// Uses saturating arithmetic on u128 to avoid panics and overflow. Caller
-/// converts to/from the concrete balance type.
+/// Non-panicking. Caller converts to/from the concrete balance type.
 pub fn split_slashed_bond_u128(bond: u128, slasher_reward_bps: u32) -> (u128, u128) {
-    let bps = slasher_reward_bps as u128;
-    let slasher_amount = bond.saturating_mul(bps) / 10_000u128;
+    let slasher_amount = bps_of_u128(bond, slasher_reward_bps);
     let treasury_amount = bond.saturating_sub(slasher_amount);
     (treasury_amount, slasher_amount)
 }
@@ -157,8 +166,7 @@ pub fn split_slashed_bond_u128(bond: u128, slasher_reward_bps: u32) -> (u128, u1
 ///
 /// `fee_bps` is in basis points of 10_000. Returns `(solver_net, protocol_fee)`.
 pub fn split_solver_profit_u128(profit: u128, fee_bps: u32) -> (u128, u128) {
-    let bps = fee_bps as u128;
-    let protocol_fee = profit.saturating_mul(bps) / 10_000u128;
+    let protocol_fee = bps_of_u128(profit, fee_bps);
     let solver_net = profit.saturating_sub(protocol_fee);
     (solver_net, protocol_fee)
 }

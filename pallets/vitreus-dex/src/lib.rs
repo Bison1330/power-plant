@@ -58,10 +58,11 @@ use frame_support::{
 use frame_system::pallet_prelude::BlockNumberFor;
 use parity_scale_codec::{Decode, Encode, MaxEncodedLen};
 use scale_info::TypeInfo;
+use sp_arithmetic::traits::Unsigned;
 use sp_runtime::{
     traits::{
-        AccountIdConversion, CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, IntegerSquareRoot,
-        Saturating, Zero,
+        AccountIdConversion, CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, Ensure,
+        IntegerSquareRoot, One, Saturating, Zero,
     },
     DispatchError, RuntimeDebug, SaturatedConversion,
 };
@@ -162,6 +163,21 @@ pub mod pallet {
 
         /// The type in which the assets for swapping are measured.
         type Balance: Balance;
+
+        /// Wide integer used for every multiply-then-divide in the pool math so
+        /// reserve products cannot overflow. Balances are 18-decimal `u128`s, so
+        /// a product of two realistic reserves (10^22 × 2·10^26) is ~10^48 and
+        /// does not fit `u128`. Bind to `sp_core::U256`, as `pallet_energy_broker`
+        /// does. Results are narrowed back with a checked conversion; a value
+        /// that does not fit `Balance` is an [`Error::Overflow`], never a
+        /// truncation.
+        type HigherPrecisionBalance: IntegerSquareRoot
+            + One
+            + Ensure
+            + Unsigned
+            + From<u32>
+            + From<Self::Balance>
+            + TryInto<Self::Balance>;
 
         /// Type of asset class used to provide liquidity.
         type AssetKind: Parameter + MaxEncodedLen;
@@ -669,16 +685,9 @@ pub mod pallet {
                 ensure!(current >= until, Error::<T>::PoolLocked);
             }
 
-            let amount_a = shares
-                .checked_mul(&pool.reserve_a)
-                .ok_or(Error::<T>::Overflow)?
-                .checked_div(&total_shares)
-                .ok_or(Error::<T>::InsufficientLiquidity)?;
-            let amount_b = shares
-                .checked_mul(&pool.reserve_b)
-                .ok_or(Error::<T>::Overflow)?
-                .checked_div(&total_shares)
-                .ok_or(Error::<T>::InsufficientLiquidity)?;
+            // D1: wide precision; floor rounds the withdrawal DOWN, in the pool's favour.
+            let amount_a = Self::mul_div_floor(shares, pool.reserve_a, total_shares)?;
+            let amount_b = Self::mul_div_floor(shares, pool.reserve_b, total_shares)?;
 
             ensure!(amount_a >= amount_a_min, Error::<T>::SlippageExceeded);
             ensure!(amount_b >= amount_b_min, Error::<T>::SlippageExceeded);
@@ -1422,6 +1431,46 @@ pub mod pallet {
             pool.reserve_b = T::Assets::balance(pair.1.clone(), &pool.pool_account);
         }
 
+        // ---- Wide-precision arithmetic helpers (D1) --------------------------
+        //
+        // All pool math that multiplies two `Balance`s goes through these. The
+        // rounding direction of every division is the same as the original
+        // `u128` code (floor), so nothing here changes which side a rounding
+        // favours; it only removes the overflow.
+
+        /// Lift a `Balance` into the wide type.
+        fn hp(b: T::Balance) -> T::HigherPrecisionBalance {
+            T::HigherPrecisionBalance::from(b)
+        }
+
+        /// Narrow a wide value back to `Balance`, failing with `Overflow` rather
+        /// than truncating.
+        fn narrow(x: T::HigherPrecisionBalance) -> Result<T::Balance, Error<T>> {
+            x.try_into().map_err(|_| Error::<T>::Overflow)
+        }
+
+        /// `floor(a * b / c)` computed in wide precision. Errors with `Overflow`
+        /// if the product overflows the wide type or the result does not fit
+        /// `Balance`, and with `InsufficientLiquidity` if `c == 0`.
+        fn mul_div_floor(
+            a: T::Balance,
+            b: T::Balance,
+            c: T::Balance,
+        ) -> Result<T::Balance, Error<T>> {
+            let q = Self::hp(a)
+                .checked_mul(&Self::hp(b))
+                .ok_or(Error::<T>::Overflow)?
+                .checked_div(&Self::hp(c))
+                .ok_or(Error::<T>::InsufficientLiquidity)?;
+            Self::narrow(q)
+        }
+
+        /// `floor(sqrt(a * b))` computed in wide precision.
+        fn sqrt_of_product(a: T::Balance, b: T::Balance) -> Result<T::Balance, Error<T>> {
+            let p = Self::hp(a).checked_mul(&Self::hp(b)).ok_or(Error::<T>::Overflow)?;
+            Self::narrow(p.integer_sqrt())
+        }
+
         /// Whether a pool exists for the (unordered) asset pair.
         pub fn pool_exists(asset_a: T::AssetKind, asset_b: T::AssetKind) -> bool {
             Pools::<T>::contains_key(Self::canonical_pair(asset_a, asset_b))
@@ -1500,10 +1549,8 @@ pub mod pallet {
             let (actual_a, actual_b, total_new_shares, shares_to_mint) = if total_shares.is_zero()
             {
                 // Finding 1: first deposit — burn MINIMUM_LIQUIDITY shares permanently.
-                let raw_shares = amount_a
-                    .checked_mul(&amount_b)
-                    .ok_or(Error::<T>::Overflow)?
-                    .integer_sqrt();
+                // D1: wide precision; integer sqrt rounds DOWN, in the pool's favour.
+                let raw_shares = Self::sqrt_of_product(amount_a, amount_b)?;
                 let min_liq: T::Balance = MINIMUM_LIQUIDITY.into();
                 ensure!(raw_shares > min_liq, Error::<T>::InsufficientInitialLiquidity);
                 let shares_to_mint = raw_shares
@@ -1513,33 +1560,21 @@ pub mod pallet {
                 (amount_a, amount_b, raw_shares, shares_to_mint)
             } else {
                 // Finding 8: calculate optimal amounts — don't donate excess tokens.
-                let optimal_b = amount_a
-                    .checked_mul(&pool.reserve_b)
-                    .ok_or(Error::<T>::Overflow)?
-                    .checked_div(&pool.reserve_a)
-                    .ok_or(Error::<T>::InsufficientLiquidity)?;
+                // D1: wide precision; floor rounds the matched amount DOWN so the
+                // depositor never over-contributes relative to the pool ratio.
+                let optimal_b = Self::mul_div_floor(amount_a, pool.reserve_b, pool.reserve_a)?;
 
                 let (actual_a, actual_b) = if optimal_b <= amount_b {
                     (amount_a, optimal_b)
                 } else {
-                    let optimal_a = amount_b
-                        .checked_mul(&pool.reserve_a)
-                        .ok_or(Error::<T>::Overflow)?
-                        .checked_div(&pool.reserve_b)
-                        .ok_or(Error::<T>::InsufficientLiquidity)?;
+                    let optimal_a =
+                        Self::mul_div_floor(amount_b, pool.reserve_a, pool.reserve_b)?;
                     (optimal_a, amount_b)
                 };
 
-                let share_a = actual_a
-                    .checked_mul(&total_shares)
-                    .ok_or(Error::<T>::Overflow)?
-                    .checked_div(&pool.reserve_a)
-                    .ok_or(Error::<T>::InsufficientLiquidity)?;
-                let share_b = actual_b
-                    .checked_mul(&total_shares)
-                    .ok_or(Error::<T>::Overflow)?
-                    .checked_div(&pool.reserve_b)
-                    .ok_or(Error::<T>::InsufficientLiquidity)?;
+                // D1: floor rounds minted shares DOWN, in the pool's favour.
+                let share_a = Self::mul_div_floor(actual_a, total_shares, pool.reserve_a)?;
+                let share_b = Self::mul_div_floor(actual_b, total_shares, pool.reserve_b)?;
                 let shares = if share_a < share_b { share_a } else { share_b };
 
                 (actual_a, actual_b, shares, shares)
@@ -1684,23 +1719,18 @@ pub mod pallet {
             let fee_tier_bal: T::Balance = pool.fee_tier.into();
             let denominator_bal: T::Balance = FEE_DENOMINATOR.into();
 
-            let fee = amount_in
-                .checked_mul(&fee_tier_bal)
-                .ok_or(Error::<T>::Overflow)?
-                .checked_div(&denominator_bal)
-                .ok_or(Error::<T>::Overflow)?;
+            // D1: wide precision. Fee keeps its pre-existing floor (rounds the
+            // fee DOWN by < 1 unit). Direction unchanged by this change.
+            let fee = Self::mul_div_floor(amount_in, fee_tier_bal, denominator_bal)?;
             let amount_in_after_fee =
                 amount_in.checked_sub(&fee).ok_or(Error::<T>::Overflow)?;
 
-            let numerator = reserve_out
-                .checked_mul(&amount_in_after_fee)
-                .ok_or(Error::<T>::Overflow)?;
+            // D1: constant-product output in wide precision; floor rounds
+            // amount_out DOWN, in the pool's favour, so k never decreases.
             let denom = reserve_in
                 .checked_add(&amount_in_after_fee)
                 .ok_or(Error::<T>::Overflow)?;
-            let amount_out = numerator
-                .checked_div(&denom)
-                .ok_or(Error::<T>::InsufficientLiquidity)?;
+            let amount_out = Self::mul_div_floor(reserve_out, amount_in_after_fee, denom)?;
 
             ensure!(amount_out >= amount_out_min, Error::<T>::SlippageExceeded);
             ensure!(amount_out < reserve_out, Error::<T>::InsufficientLiquidity);
