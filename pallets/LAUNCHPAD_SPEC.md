@@ -1,6 +1,6 @@
 # pallet-launchpad — Design Specification
 
-**Status:** design, v1 · **Target branch:** `feature/solver-marketplace` (DEX at `ce34a05`; PoolManager trait from `f3350e4`, D1 landed in `ce34a05`) · **Date:** 2026-09-12
+**Status:** design, v1 · **Target branch:** `feature/solver-marketplace` (DEX at `5ea3008`; PoolManager trait from `f3350e4`, D1 landed in `ce34a05`, D2+D3 landed in `5ea3008`) · **Date:** 2026-09-12
 
 A bonding-curve token launchpad as a FRAME pallet. Each launch mints a fixed-supply `pallet_assets` token into a pallet-owned escrow, sells 80% of it along a constant-product curve quoted in VTRS, and on sell-out seeds a permanently locked VitreusDEX pool with the raised VTRS and the remaining 20%. No party — creator, governance, or the pallet itself — has a path to withdraw curve or pool funds.
 
@@ -177,7 +177,7 @@ pub trait Config: frame_system::Config {
     type NativeAssetKind: Get<Self::AssetKind>;
     type IntoAssetKind: Convert<Self::AssetId, Self::AssetKind>;
     type Dex: PoolManager<Self::AccountId, Self::AssetKind, Self::Balance, BlockNumberFor<Self>>
-            + ReservedPoolSeeder<...>;     // §5.2 — DEX change D2
+            + ReservedPoolSeeder<...>;     // §5.2 — DEX D2, landed in 5ea3008
 
     type Treasury: Get<Self::AccountId>;
     type PalletId: Get<PalletId>;
@@ -476,7 +476,7 @@ No transition out of Graduated. No transition from Complete back to Trading.
 pre:  phase == Complete
       real_quote  == R  (all raised VTRS; checked ≥ 0, no other assumption)
       escrow token balance ≥ RESERVED
-1. shares = T::Dex::seed_reserved_pool_for(           // DEX change D2, §5.2 — atomic in the DEX:
+1. shares = T::Dex::seed_reserved_pool_for(           // DEX D2 (5ea3008), §5.2 — atomic in the DEX:
        who        = escrow,
        asset      = IntoAssetKind(asset_id),
        quote      = NativeAssetKind,
@@ -575,7 +575,7 @@ I13 For every buy: tokens_out × (Q_before + q_net) ≤ k_before  (trader never 
 
 > A pool whose pair contains an asset in the reserved range can be created only by the launchpad's seeding path, and its first deposit is exactly the amounts the launchpad has stored. No account other than the launchpad's escrow can ever hold LP shares from that first deposit, and that position is locked until `BlockNumber::MAX`.
 
-This is enforced in `pallets/vitreus-dex`, not in the launchpad, because the launchpad cannot see or prevent what other callers do to the DEX. Changes required beyond `f3350e4` (D1 is already landed as `ce34a05`; D2–D4 remain open):
+This is enforced in `pallets/vitreus-dex`, not in the launchpad, because the launchpad cannot see or prevent what other callers do to the DEX. Changes beyond `f3350e4`. D1 (`ce34a05`), D2 and D3 (`5ea3008`) are landed and kept here for the record; only D4 remains open.
 
 ### 5.2 Required changes to `pallets/vitreus-dex`
 
@@ -583,7 +583,8 @@ This is enforced in `pallets/vitreus-dex`, not in the launchpad, because the lau
 Kept for the record; the description below is of the bug as it existed at `f3350e4`.
 `do_add_liquidity_for` computes `amount_a.checked_mul(&amount_b)?.integer_sqrt()`; `do_swap` computes `reserve_out × amount_in_after_fee`; `remove_liquidity` computes `shares × reserve`; the optimal-amount branch computes `amount_a × reserve_b`. With the seed amounts of any launch (`real_quote ≈ 10^22`, `RESERVED = 2·10^26`) the product is `2·10^48 > u128::MAX ≈ 3.4·10^38`, so every one of these returns `Error::Overflow`. Even a 1-VTRS pool against 18-decimal tokens overflows (`10^18 × 2·10^26`). Every multiply-then-divide in the DEX must go through `U256` (`primitive-types` is already a dependency) and convert back with `try_into`. This affects all pools, not only launchpad ones; the existing energy pools presumably use small integers, which is why the tests pass. Fixed by routing every multiply-then-divide through `Config::HigherPrecisionBalance` (`sp_core::U256`) with floor rounding preserved at every site; covered by the six `scale_*` tests in `pallets/vitreus-dex/src/tests.rs`. Launchpad test `fm11_seed_overflow_is_impossible` stays as a regression guard.
 
-**D2 — REQUIRED: reserved-asset guard and atomic seeding.**
+**D2 — DONE in `5ea3008`: reserved-asset guard and atomic seeding.**
+Implemented as specified below, with one deliberate deviation noted at the end. Runtime wiring: `LaunchpadReservedAssets` reserves `WithId(id)` for `id ∈ [2^64, 2^65)` (`LAUNCHPAD_ASSET_ID_START/END` in `runtime/vitreus/src/lib.rs`), `ExcessRecipient = xcm_config::TreasuryAccount`. `pallet_vitreus_dex::Pallet::pool_account_for(a, b)` is public so the launchpad can derive the sub-account before the pool exists.
 
 ```rust
 // Config additions
@@ -611,9 +612,11 @@ Transfer order inside the seed must be **quote first, then asset**: the pool sub
 
 Who may call `seed_reserved_pool_for` is a runtime-wiring invariant: only `pallet_launchpad::Config::Dex` binds the trait, and `pallets/vitreus-dex` exposes no extrinsic that reaches it. Test `fm01_only_launchpad_can_seed_reserved_pool` asserts that `create_pool` (root) and `add_liquidity` (signed) both fail for a reserved asset before graduation.
 
-**D3 — SHOULD: locks can only extend.** `do_lock_liquidity_for` sets `locked_until` unconditionally, so a later call could shorten a lock. Change to `pos.locked_until = Some(max(existing, lock_until))`. Not exploitable for launchpad positions today (no signer for escrow, no other in-runtime caller), but the invariant "locked until MAX means forever" should not depend on that.
+*Deviation from the text above, decided during implementation:* if `ExcessRecipient` cannot receive a swept asset (e.g. an account with no provider cannot hold a non-sufficient asset), the seed **fails** with `Error::ExcessRecipientCannotReceive` instead of burning the balance. A silent burn would make a mis-wired recipient indistinguishable from correct operation; a loud failure is fixed by re-wiring and retried permissionlessly (FM-11). The transfer attempt runs in its own storage layer so nothing is half-applied. The seeder additionally requires `asset` to be reserved and `quote` not to be (`Error::NotReservedAsset`), so it cannot be used to create arbitrary permanently-locked pools around `ManageOrigin`. Sweep order is asset-then-quote so the non-sufficient asset's consumer reference is released before the native balance is swept to zero. DEX tests: `reserved_asset_rejected_by_create_pool_for_every_caller`, `seed_reserved_pool_creates_pool_deposits_stored_amounts_and_locks_forever`, `seed_sweeps_pre_seed_donations_so_opening_price_is_stored_ratio`, `seed_burns_pre_seed_donation_when_recipient_cannot_receive_it` (name predates the deviation; it asserts the failure and recovery), `seed_is_transactional_when_sweep_or_deposit_fails`, `seed_rejects_wrong_assets_double_seed_and_mismatched_adoption`, `canonical_pair_orders_native_before_with_id`.
 
-**D4 — OPTIONAL, v2: per-pool fee routing.** At ce34a05 100% of the swap fee stays in the pool's reserves. Because the launchpad's LP is locked forever, post-graduation fees accrue as pool depth, not as revenue to the treasury or creator. If the protocol is to *capture* ongoing trading fees (as opposed to compounding them), `PoolInfo` needs `protocol_fee_bps` / `creator_fee_bps` fields and `do_swap` must route those slices. The launchpad spec is written so that D4 can be added without touching launch state: `Launch.creator_fee_recipient` is the address the DEX would pay. Out of v1 scope.
+**D3 — DONE in `5ea3008`: locks can only extend.** At `f3350e4` `do_lock_liquidity_for` set `locked_until` unconditionally, so a later call could shorten a lock. It is now monotone: an equal block is a no-op, an earlier block fails with `Error::LockCannotBeShortened` (rather than silently keeping the max, so a caller that expected to shorten finds out). Covered by `lock_can_be_extended_but_never_shortened` and the lock assertions in the seed test. Not exploitable for launchpad positions today (no signer for escrow, no other in-runtime caller), but the invariant "locked until MAX means forever" should not depend on that.
+
+**D4 — OPEN, v2: per-pool fee routing.** At 5ea3008 100% of the swap fee stays in the pool's reserves. Because the launchpad's LP is locked forever, post-graduation fees accrue as pool depth, not as revenue to the treasury or creator. If the protocol is to *capture* ongoing trading fees (as opposed to compounding them), `PoolInfo` needs `protocol_fee_bps` / `creator_fee_bps` fields and `do_swap` must route those slices. The launchpad spec is written so that D4 can be added without touching launch state: `Launch.creator_fee_recipient` is the address the DEX would pay. Out of v1 scope.
 
 **D5 — note, no change:** `MINIMUM_LIQUIDITY = 1000` shares are burned on first deposit. At seed scale `isqrt(10^22 × 2·10^26) ≈ 1.4·10^24` shares, so the burn is 10^-21 of the position; ignore.
 
@@ -629,20 +632,20 @@ Who may call `seed_reserved_pool_for` is a runtime-wiring invariant: only `palle
 
 ## 6. Test plan
 
-Unit tests live in `pallets/launchpad/src/tests.rs` against a mock that includes the real `pallet_vitreus_dex` (with D2–D3 applied; D1 is in `ce34a05`) and `pallet_assets`. Property tests use `proptest` over trade sequences. Test names are stable identifiers; a test that cannot be made to fail before the mitigation is added is not a test.
+Unit tests live in `pallets/launchpad/src/tests.rs` against a mock that includes the real `pallet_vitreus_dex` at `5ea3008` or later (D1–D3 landed) and `pallet_assets`. Property tests use `proptest` over trade sequences. Test names are stable identifiers; a test that cannot be made to fail before the mitigation is added is not a test.
 
 ### 6.1 Failure-mode tests
 
 | Test | Setup | Attack | Assertion that must fail the attack |
 |---|---|---|---|
 | `fm01_only_launchpad_can_seed_reserved_pool` | Launch L in Trading | (a) root calls `VitreusDex::create_pool(WithId(asset_L), Native, 3)`; (b) signed user calls `add_liquidity` for the pair | (a) `Error::ReservedAsset`; (b) `PoolNotFound`. After L graduates: `pool_exists`, and `add_liquidity` by users succeeds (post-graduation LP is allowed). |
-| `fm01_seed_into_existing_liquid_pool_is_rejected` | Mock a DEX build with D2 guard disabled; root creates pool for asset_L and adds liquidity at 10× `p_end` | Crossing buy | Buy succeeds; `GraduationDeferred{PoolAlreadySeeded}` emitted; `phase == Complete`; escrow still holds `real_quote` and `RESERVED`; `graduate()` fails with the same error; `force_seed_into_existing_pool` before `RescueDelay` fails `RescueNotDue`; after delay with `max_price_deviation_bps = 100` fails `PriceOutOfTolerance`. |
+| `fm01_seed_into_existing_liquid_pool_is_rejected` | Insert a `Pools`/`TotalLiquidity` record for asset_L directly into DEX storage (the guard makes this unreachable through any call) and add liquidity at 10× `p_end`; root creates pool for asset_L and adds liquidity at 10× `p_end` | Crossing buy | Buy succeeds; `GraduationDeferred{PoolAlreadySeeded}` emitted; `phase == Complete`; escrow still holds `real_quote` and `RESERVED`; `graduate()` fails with the same error; `force_seed_into_existing_pool` before `RescueDelay` fails `RescueNotDue`; after delay with `max_price_deviation_bps = 100` fails `PriceOutOfTolerance`. |
 | `fm02_prefunded_pool_account_does_not_move_opening_price` | Launch L; compute the DEX pool sub-account for `(Native, WithId(asset_L))` | Before crossing: transfer 10× `RESERVED` of tokens (bought on curve) and 5 VTRS directly to that account | After graduation the pool reserves equal exactly `(real_quote, RESERVED)`; the donated balances are in Treasury; `spot_price == quote_seeded / tokens_seeded`; first swap after seed does not change price by more than its own impact. |
 | `fm03_no_path_moves_escrow_funds_except_curve_and_seed` | Graduated and Trading launches | Enumerate every dispatchable in the runtime (`RuntimeCall` variants) with root and with signed origins targeting escrow / pool accounts | For each call, escrow VTRS and token balances after == before, except `buy`, `sell`, `claim_creator_fees` (creator part only, ≤ `creator_fees_unclaimed`), `graduate`. `pallet_assets::force_transfer` from escrow is the documented exception and is asserted to be root-only. Second assertion: `RuntimeCall::Launchpad` has no variant named `force_withdraw|force_refund|force_cancel|force_set_phase|force_mint` (compile-time enum check). |
 | `fm03_flash_style_complete_then_extract` | Launch at 50% progress | Actor buys to completion in one call, then attempts every call from the fm03 list in the same block | Actor's VTRS out ≤ VTRS in − fees; the only way to get VTRS back is `sell` (rejected, phase Complete) or the pool after seed at `p_end` with price impact. |
 | `fm04_donation_to_escrow_is_inert` | Launch at 30% | Transfer 100 VTRS and 10M tokens (bought) directly to escrow | `quote_buy(1 VTRS)` identical before/after; `tokens_remaining`, `real_quote` unchanged; a later crossing seeds exactly `(real_quote, RESERVED)`; donated amounts remain in escrow after graduation (never enter the pool). |
 | `fm05_all_entry_paths_hit_the_hook` | Bind `BuyHook` to a mock that records `(launch_id, who, now, quote_in)` and rejects `who == BLACKLISTED` | Call `buy` directly; via `utility.batch_all`; via `proxy.proxy`; via `multisig`; via `create_launch(initial_buy>0)` | Every path produces exactly one hook call per buy with identical arguments; the blacklisted account is rejected on every path; a batch of N buys yields N hook calls (no aggregation). |
-| `fm06_no_creator_lp_and_position_is_permanent` | Graduated launch | (a) creator calls `remove_liquidity`; (b) escrow "signs" (impossible — assert no key derivation); (c) call `lock_liquidity_for(escrow, …, lock_until = now)` through the trait | (a) `InsufficientShares`; (c) with D3, `locked_until` remains `MAX`; `LiquidityPositions` contains exactly one position for the pair, owned by escrow, `locked_until == Some(MAX)`; advancing to `BlockNumber::MAX − 1` still blocks removal. |
+| `fm06_no_creator_lp_and_position_is_permanent` | Graduated launch | (a) creator calls `remove_liquidity`; (b) escrow "signs" (impossible — assert no key derivation); (c) call `lock_liquidity_for(escrow, …, lock_until = now)` through the trait | (a) `InsufficientShares`; (c) `LockCannotBeShortened` and `locked_until` remains `MAX`; `LiquidityPositions` contains exactly one position for the pair, owned by escrow, `locked_until == Some(MAX)`; advancing to `BlockNumber::MAX − 1` still blocks removal. |
 | `fm07_hook_receives_block_numbers_not_time` | Mock hook that rejects buys where `now == launch_created_at` | Buy in the creation block from a non-creator; buy in creation block via `create_launch(initial_buy)`; change `Timestamp` without advancing block | Non-creator rejected; creator initial buy passes (`is_creator == true`); timestamp change alone does not alter the outcome. (Behavioural hook test for the v2 mechanism's substrate; v1 `()` variant asserts pass-through.) |
 | `fm08_crossing_buy_partial_fill_and_deferred_seed` | Launch with `tokens_remaining = 1M`; DEX mock forced to fail seeding once | Buy with `q_in` = 3× the VTRS needed to sell out | Buyer receives exactly `1M` tokens; charged exactly `quote_net_used + fee` per §3.3 (≤ `q_in`, remainder untouched); `phase == Complete`; `GraduationDeferred` emitted; `sell` now fails `WrongPhase`; `buy` fails `WrongPhase`; unforce the DEX; anyone calls `graduate` → `Graduated`, pool reserves `(real_quote, RESERVED)`. |
 | `fm08_min_tokens_out_respected_on_partial_fill` | Same | Buy with `min_tokens_out = 2M` | Fails `SlippageExceeded`; state unchanged; a second buyer with `min_tokens_out = 0` completes the curve. |
@@ -687,7 +690,7 @@ Errors: see §2 header; plus `ReservedAsset`, `PoolAlreadySeeded` surfaced from 
 
 ## 8. Open items for the implementer
 
-1. **D1 is landed (`ce34a05`).** Launchpad integration tests may target the DEX at that commit or later; D2 and D3 are the remaining prerequisites.
+1. **D1–D3 are landed (`ce34a05`, `5ea3008`).** The DEX prerequisites for v1 are complete; launchpad integration tests should target `5ea3008` or later. D4 is v2.
 2. `fungibles::metadata::Mutate::set` in `pallet_assets` (stable2407) charges the metadata deposit from `from`; confirm the escrow's reserved-deposit accounting in §2.1.5 against the actual reserve amounts rather than the constants (use `Currency::balance` before/after).
 3. `with_storage_layer` inside a `#[transactional]` extrinsic: confirm the nested layer commits independently (it does in FRAME ≥ polkadot-sdk 1.x; `TransactionOutcome::Rollback` on Err).
 4. Runtime API: `LaunchpadApi::{quote_buy, quote_sell, launch_state}`.
