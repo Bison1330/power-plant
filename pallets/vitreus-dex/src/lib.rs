@@ -51,7 +51,12 @@ use frame_support::{
     dispatch::DispatchResult,
     traits::{
         fungibles::{Balanced, Inspect, Mutate},
-        tokens::{Balance, Preservation::{Expendable, Preserve}},
+        tokens::{
+            Balance,
+            Fortitude::Polite,
+            Preservation::{Expendable, Preserve},
+        },
+        Contains,
     },
     PalletId,
 };
@@ -61,7 +66,7 @@ use scale_info::TypeInfo;
 use sp_arithmetic::traits::Unsigned;
 use sp_runtime::{
     traits::{
-        AccountIdConversion, CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, Ensure,
+        AccountIdConversion, Bounded, CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, Ensure,
         IntegerSquareRoot, One, Saturating, Zero,
     },
     DispatchError, RuntimeDebug, SaturatedConversion,
@@ -132,13 +137,51 @@ pub trait PoolManager<AccountId, AssetKind, Balance, BlockNumber> {
         amount_b_min: Balance,
     ) -> Result<Balance, DispatchError>;
 
-    /// Lock `who`'s LP position in the pool until `lock_until`.
+    /// Extend the lock on `who`'s LP position in the pool to `lock_until`.
+    /// A lock can only ever be extended: passing a block earlier than the
+    /// current lock fails with `LockCannotBeShortened`.
     fn lock_liquidity_for(
         who: &AccountId,
         asset_a: AssetKind,
         asset_b: AssetKind,
         lock_until: BlockNumber,
     ) -> DispatchResult;
+}
+
+/// The single entry point through which a pool for a *reserved* asset (see
+/// [`Config::ReservedAssets`]) can come into existence. Reserved assets are
+/// rejected by every other pool-creation path, including `ManageOrigin`.
+///
+/// Intended for the launchpad pallet's graduation step. The implementation
+/// is transactional and, in order:
+///
+/// 1. requires `asset` to be reserved and `quote` not to be;
+/// 2. creates the pool, or adopts an existing pool that has never received
+///    liquidity (`TotalLiquidity == 0`); a pool that already holds shares is
+///    rejected with `PoolAlreadySeeded`;
+/// 3. sweeps any balance the pool's sub-account already holds in either asset
+///    to [`Config::ExcessRecipient`], so a donation parked at the (predictable)
+///    pool address before seeding cannot be absorbed by `sync_reserves` into
+///    the opening price. If the recipient cannot receive the asset the whole
+///    seed fails with `ExcessRecipientCannotReceive` — loudly, so a mis-wired
+///    recipient is noticed and fixed, after which seeding can be retried;
+/// 4. pulls exactly `(amount_quote, amount_asset)` from `who` — quote first, so
+///    the pool account has a provider before it receives a possibly
+///    non-sufficient asset — as the pool's first deposit;
+/// 5. locks `who`'s position until `BlockNumber::max_value()`.
+///
+/// No origin check is performed; only the launchpad binds this trait and the
+/// DEX exposes no extrinsic that reaches it.
+pub trait ReservedPoolSeeder<AccountId, AssetKind, Balance, BlockNumber> {
+    /// Returns the LP shares credited to `who` (net of `MINIMUM_LIQUIDITY`).
+    fn seed_reserved_pool_for(
+        who: &AccountId,
+        asset: AssetKind,
+        quote: AssetKind,
+        amount_asset: Balance,
+        amount_quote: Balance,
+        fee_tier: u32,
+    ) -> Result<Balance, DispatchError>;
 }
 
 #[frame_support::pallet]
@@ -194,6 +237,16 @@ pub mod pallet {
         /// Identifier of energy asset.
         #[pallet::constant]
         type EnergyAsset: Get<Self::AssetKind>;
+
+        /// Assets for which pools may only be created through
+        /// [`ReservedPoolSeeder::seed_reserved_pool_for`]. `do_create_pool`
+        /// rejects them for every caller, `ManageOrigin` included. The
+        /// runtime binds this to the launchpad's asset-id range.
+        type ReservedAssets: Contains<Self::AssetKind>;
+
+        /// Recipient of any balance found in a reserved pool's sub-account
+        /// before it is seeded (see [`ReservedPoolSeeder`]).
+        type ExcessRecipient: Get<Self::AccountId>;
 
         // ---- Solver marketplace config ----
 
@@ -408,6 +461,34 @@ pub mod pallet {
             /// The block until which the position is locked.
             locked_until: BlockNumberFor<T>,
         },
+        /// A balance found in a reserved pool's sub-account before seeding was
+        /// moved to `ExcessRecipient` so it could not affect the opening price.
+        PreSeedBalanceSwept {
+            /// The pool pair (canonical order).
+            pool: (T::AssetKind, T::AssetKind),
+            /// The asset that was swept.
+            asset: T::AssetKind,
+            /// Amount moved out of the pool sub-account.
+            amount: T::Balance,
+            /// Where it went.
+            to: T::AccountId,
+        },
+        /// A reserved-asset pool was seeded through `ReservedPoolSeeder` and
+        /// its first position locked permanently.
+        ReservedPoolSeeded {
+            /// Account whose balances funded the seed and who owns the locked position.
+            who: T::AccountId,
+            /// The reserved asset.
+            asset: T::AssetKind,
+            /// The quote asset.
+            quote: T::AssetKind,
+            /// Reserved-asset amount deposited.
+            amount_asset: T::Balance,
+            /// Quote amount deposited.
+            amount_quote: T::Balance,
+            /// LP shares credited to `who`.
+            shares: T::Balance,
+        },
         /// The `OnEnergySell` hook was invoked against this pallet.
         EnergySold {
             /// The amount reported by the hook.
@@ -562,6 +643,20 @@ pub mod pallet {
         Overflow,
         /// Initial liquidity deposit is too small to exceed MINIMUM_LIQUIDITY.
         InsufficientInitialLiquidity,
+        /// The pair contains a reserved asset; such pools can only be created
+        /// through `ReservedPoolSeeder::seed_reserved_pool_for`.
+        ReservedAsset,
+        /// `seed_reserved_pool_for` was called for an asset that is not
+        /// reserved, or with a reserved asset as the quote.
+        NotReservedAsset,
+        /// The reserved pool already holds liquidity and cannot be seeded again.
+        PoolAlreadySeeded,
+        /// A liquidity lock can be extended but never shortened.
+        LockCannotBeShortened,
+        /// A pre-seed balance in the pool sub-account could not be delivered to
+        /// `ExcessRecipient` (for example, the recipient has no provider and the
+        /// asset is not sufficient). Fix the recipient and retry the seed.
+        ExcessRecipientCannotReceive,
 
         // ---- Solver marketplace errors ----
         /// Caller is not a registered solver.
@@ -756,7 +851,9 @@ pub mod pallet {
             Ok(())
         }
 
-        /// Lock a liquidity position until a given block.
+        /// Lock a liquidity position until a given block, or extend an
+        /// existing lock. A lock can never be shortened (D3): passing a block
+        /// earlier than the current lock fails with `LockCannotBeShortened`.
         ///
         /// Finding 10: activates the previously dead `locked_until` field.
         #[pallet::call_index(4)]
@@ -1486,37 +1583,200 @@ pub mod pallet {
             asset_b: T::AssetKind,
             fee_tier: u32,
         ) -> DispatchResult {
-            // Finding 4: whitelist allowed fee tiers (0.1%, 0.3%, 1.0%).
+            // D2: a reserved asset can only get a pool through
+            // `seed_reserved_pool_for`. No caller is exempt.
             ensure!(
-                fee_tier == 1 || fee_tier == 3 || fee_tier == 10,
-                Error::<T>::InvalidFeeTier
+                !T::ReservedAssets::contains(&asset_a) && !T::ReservedAssets::contains(&asset_b),
+                Error::<T>::ReservedAsset
             );
+            Self::ensure_valid_fee_tier(fee_tier)?;
 
             // Finding 5: canonicalize pair to prevent duplicate pools.
             let pair = Self::canonical_pair(asset_a, asset_b);
             ensure!(!Pools::<T>::contains_key(&pair), Error::<T>::PoolAlreadyExists);
 
+            Self::insert_new_pool(&pair, fee_tier);
+            Ok(())
+        }
+
+        /// Finding 4: whitelist allowed fee tiers (0.1%, 0.3%, 1.0%).
+        fn ensure_valid_fee_tier(fee_tier: u32) -> DispatchResult {
+            ensure!(
+                fee_tier == 1 || fee_tier == 3 || fee_tier == 10,
+                Error::<T>::InvalidFeeTier
+            );
+            Ok(())
+        }
+
+        /// The sub-account that holds a pool's reserves, for the (unordered) pair.
+        ///
+        /// Deterministic in the pair, so it can be computed before the pool
+        /// exists — which is exactly why `seed_reserved_pool_for` sweeps it.
+        pub fn pool_account_for(asset_a: T::AssetKind, asset_b: T::AssetKind) -> T::AccountId {
+            let pair = Self::canonical_pair(asset_a, asset_b);
             // Finding 6: length-prefix each asset encoding to avoid truncation collisions.
             let pair_key = (pair.0.encode(), pair.1.encode());
-            let pool_account: T::AccountId = PALLET_ID.into_sub_account_truncating(&pair_key);
+            PALLET_ID.into_sub_account_truncating(&pair_key)
+        }
 
+        /// Write a fresh, empty pool record for an already-canonical `pair`.
+        /// Callers must have checked that no pool exists.
+        fn insert_new_pool(pair: &(T::AssetKind, T::AssetKind), fee_tier: u32) {
             let pool = PoolInfo {
                 reserve_a: Zero::zero(),
                 reserve_b: Zero::zero(),
                 fee_tier,
                 total_fees_collected: Zero::zero(),
-                pool_account,
+                pool_account: Self::pool_account_for(pair.0.clone(), pair.1.clone()),
             };
 
-            Pools::<T>::insert(&pair, pool);
-            TotalLiquidity::<T>::insert(&pair, T::Balance::zero());
+            Pools::<T>::insert(pair, pool);
+            TotalLiquidity::<T>::insert(pair, T::Balance::zero());
 
             Self::deposit_event(Event::PoolCreated {
-                asset_a: pair.0,
-                asset_b: pair.1,
+                asset_a: pair.0.clone(),
+                asset_b: pair.1.clone(),
                 fee_tier,
             });
-            Ok(())
+        }
+
+        /// Body of [`ReservedPoolSeeder::seed_reserved_pool_for`]; see the
+        /// trait docs for the contract. Transactional: any failure leaves no
+        /// trace, including the sweep.
+        #[frame_support::transactional]
+        pub fn do_seed_reserved_pool_for(
+            who: &T::AccountId,
+            asset: T::AssetKind,
+            quote: T::AssetKind,
+            amount_asset: T::Balance,
+            amount_quote: T::Balance,
+            fee_tier: u32,
+        ) -> Result<T::Balance, DispatchError> {
+            ensure!(
+                amount_asset > Zero::zero() && amount_quote > Zero::zero(),
+                Error::<T>::ZeroAmount
+            );
+            // Only reserved assets come through here, and only against a
+            // non-reserved quote, so this path cannot be used to mint arbitrary
+            // permanently-locked pools around `ManageOrigin`.
+            ensure!(T::ReservedAssets::contains(&asset), Error::<T>::NotReservedAsset);
+            ensure!(!T::ReservedAssets::contains(&quote), Error::<T>::NotReservedAsset);
+            ensure!(asset.encode() != quote.encode(), Error::<T>::NotReservedAsset);
+            Self::ensure_valid_fee_tier(fee_tier)?;
+
+            // 1. Create, or adopt an empty pool.
+            let pair = Self::canonical_pair(asset.clone(), quote.clone());
+            match Pools::<T>::get(&pair) {
+                None => Self::insert_new_pool(&pair, fee_tier),
+                Some(existing) => {
+                    let shares = TotalLiquidity::<T>::get(&pair).unwrap_or_else(Zero::zero);
+                    ensure!(shares.is_zero(), Error::<T>::PoolAlreadySeeded);
+                    ensure!(existing.fee_tier == fee_tier, Error::<T>::InvalidFeeTier);
+                },
+            }
+            let mut pool = Pools::<T>::get(&pair).ok_or(Error::<T>::PoolNotFound)?;
+            ensure!(
+                pool.reserve_a.is_zero() && pool.reserve_b.is_zero(),
+                Error::<T>::PoolAlreadySeeded
+            );
+
+            // 2. Sweep whatever already sits in the pool sub-account (FM-02).
+            //    The reserved asset goes first: for a non-sufficient asset the
+            //    pool account's asset balance holds a consumer reference on its
+            //    native account, which must be released before the native
+            //    balance can be swept to zero.
+            let excess_to = T::ExcessRecipient::get();
+            let sweep_order = if T::ReservedAssets::contains(&pair.0) {
+                [pair.0.clone(), pair.1.clone()]
+            } else {
+                [pair.1.clone(), pair.0.clone()]
+            };
+            for swept in sweep_order {
+                let held = T::Assets::reducible_balance(swept.clone(), &pool.pool_account, Expendable, Polite);
+                if held.is_zero() {
+                    continue;
+                }
+                // Deliver to the recipient. If it cannot take the asset (for
+                // example a treasury with no provider cannot hold a
+                // non-sufficient asset) fail the seed with a distinct error
+                // rather than burning: a silent burn would make a mis-wired
+                // recipient look like correct operation, whereas a loud failure
+                // is fixed by re-wiring and retrying. The attempt runs in its
+                // own storage layer so the underlying error leaves nothing
+                // half-applied before the outer transactional rollback.
+                frame_support::storage::with_storage_layer(|| {
+                    T::Assets::transfer(swept.clone(), &pool.pool_account, &excess_to, held, Expendable)
+                })
+                .map_err(|_| Error::<T>::ExcessRecipientCannotReceive)?;
+                Self::deposit_event(Event::PreSeedBalanceSwept {
+                    pool: pair.clone(),
+                    asset: swept,
+                    amount: held,
+                    to: excess_to.clone(),
+                });
+            }
+
+            // 3. First deposit, with the amounts mapped onto the canonical
+            //    slots. Quote is transferred FIRST regardless of canonical
+            //    order: the pool account may have just been emptied (or never
+            //    existed) and needs a provider before it can hold a
+            //    non-sufficient asset. Do not rely on `canonical_pair` putting
+            //    the native asset first.
+            let asset_is_a = pair.0.encode() == asset.encode();
+            let (amount_a, amount_b) =
+                if asset_is_a { (amount_asset, amount_quote) } else { (amount_quote, amount_asset) };
+
+            // Finding 1: first deposit — burn MINIMUM_LIQUIDITY shares permanently.
+            let raw_shares = Self::sqrt_of_product(amount_a, amount_b)?;
+            let min_liq: T::Balance = MINIMUM_LIQUIDITY.into();
+            ensure!(raw_shares > min_liq, Error::<T>::InsufficientInitialLiquidity);
+            let shares_to_mint = raw_shares.checked_sub(&min_liq).ok_or(Error::<T>::Overflow)?;
+            ensure!(shares_to_mint > Zero::zero(), Error::<T>::ZeroAmount);
+
+            T::Assets::transfer(quote.clone(), who, &pool.pool_account, amount_quote, Expendable)?;
+            T::Assets::transfer(asset.clone(), who, &pool.pool_account, amount_asset, Expendable)?;
+
+            pool.reserve_a = amount_a;
+            pool.reserve_b = amount_b;
+            Pools::<T>::insert(&pair, &pool);
+            TotalLiquidity::<T>::insert(&pair, raw_shares);
+
+            // 4. Position, locked forever. `who` never has an existing position
+            //    here (the pool had no shares), so this is an insert.
+            let current_block = frame_system::Pallet::<T>::block_number();
+            let forever: BlockNumberFor<T> = Bounded::max_value();
+            LiquidityPositions::<T>::insert(
+                who,
+                &pair,
+                LiquidityPosition {
+                    shares: shares_to_mint,
+                    entry_block: current_block,
+                    locked_until: Some(forever),
+                },
+            );
+
+            Self::deposit_event(Event::LiquidityAdded {
+                provider: who.clone(),
+                asset_a: pair.0.clone(),
+                asset_b: pair.1.clone(),
+                amount_a,
+                amount_b,
+                shares_minted: shares_to_mint,
+            });
+            Self::deposit_event(Event::LiquidityLocked {
+                who: who.clone(),
+                pool: pair,
+                locked_until: forever,
+            });
+            Self::deposit_event(Event::ReservedPoolSeeded {
+                who: who.clone(),
+                asset,
+                quote,
+                amount_asset,
+                amount_quote,
+                shares: shares_to_mint,
+            });
+            Ok(shares_to_mint)
         }
 
         /// Add liquidity to an existing pool on behalf of `who`.
@@ -1647,10 +1907,14 @@ pub mod pallet {
             Ok(shares_to_mint)
         }
 
-        /// Lock `who`'s liquidity position in the given pool until `lock_until`.
+        /// Extend the lock on `who`'s liquidity position in the given pool to
+        /// `lock_until`.
         ///
         /// Body of the `lock_liquidity` extrinsic with the signer resolved by
         /// the caller. Fails with `InsufficientShares` if `who` has no position.
+        /// D3: a lock is monotone — re-locking to the same block is a no-op,
+        /// an earlier block fails with `LockCannotBeShortened`, so a position
+        /// locked to `BlockNumber::max_value()` stays locked for good.
         pub fn do_lock_liquidity_for(
             who: &T::AccountId,
             asset_a: T::AssetKind,
@@ -1664,6 +1928,9 @@ pub mod pallet {
                 &pair,
                 |maybe_pos| -> DispatchResult {
                     let pos = maybe_pos.as_mut().ok_or(Error::<T>::InsufficientShares)?;
+                    if let Some(existing) = pos.locked_until {
+                        ensure!(lock_until >= existing, Error::<T>::LockCannotBeShortened);
+                    }
                     pos.locked_until = Some(lock_until);
                     Ok(())
                 },
@@ -1888,6 +2155,21 @@ impl<T: Config> PoolManager<T::AccountId, T::AssetKind, T::Balance, BlockNumberF
         lock_until: BlockNumberFor<T>,
     ) -> DispatchResult {
         Self::do_lock_liquidity_for(who, asset_a, asset_b, lock_until)
+    }
+}
+
+impl<T: Config> ReservedPoolSeeder<T::AccountId, T::AssetKind, T::Balance, BlockNumberFor<T>>
+    for Pallet<T>
+{
+    fn seed_reserved_pool_for(
+        who: &T::AccountId,
+        asset: T::AssetKind,
+        quote: T::AssetKind,
+        amount_asset: T::Balance,
+        amount_quote: T::Balance,
+        fee_tier: u32,
+    ) -> Result<T::Balance, DispatchError> {
+        Self::do_seed_reserved_pool_for(who, asset, quote, amount_asset, amount_quote, fee_tier)
     }
 }
 

@@ -799,3 +799,428 @@ fn scale_narrowing_errors_instead_of_truncating() {
         assert!(LiquidityPositions::<Test>::get(BOB, VitreusDex::canonical_pair(native(), meme())).is_none());
     });
 }
+
+// ============================================================================
+// D2: reserved-asset guard + ReservedPoolSeeder. D3: monotone locks.
+//
+// Reserved ids in the mock are `WithId(id)` with id >= RESERVED_ASSET_BASE.
+// LAUNCH_ID is an 18-decimal, non-sufficient asset so the pool sub-account
+// needs a native provider before it can hold it — which is what makes the
+// quote-first transfer order observable.
+// ============================================================================
+
+const LAUNCH_ID: u32 = RESERVED_ASSET_BASE + 1;
+
+fn launch() -> NativeOrAssetId {
+    NativeOrAssetId::WithId(LAUNCH_ID)
+}
+
+/// The escrow-like account that funds a seed; deliberately not ALICE/BOB.
+const ESCROW: u128 = 42;
+
+/// Mints the reserved asset and funds ESCROW at seed scale. Does NOT create a pool.
+fn setup_reserved_asset() {
+    assert_ok!(Balances::force_set_balance(RuntimeOrigin::root(), ESCROW, 1_000_000 * UNIT));
+    assert_ok!(Balances::force_set_balance(RuntimeOrigin::root(), BOB, 1_000_000 * UNIT));
+    assert_ok!(Assets::force_create(RuntimeOrigin::root(), LAUNCH_ID, ALICE, false, 1));
+    assert_ok!(Assets::mint(RuntimeOrigin::signed(ALICE), LAUNCH_ID, ESCROW, 1_000_000_000 * UNIT));
+    assert_ok!(Assets::mint(RuntimeOrigin::signed(ALICE), LAUNCH_ID, BOB, 1_000_000_000 * UNIT));
+}
+
+fn seed(who: u128) -> Result<u128, sp_runtime::DispatchError> {
+    <VitreusDex as crate::ReservedPoolSeeder<u128, NativeOrAssetId, u128, u64>>::seed_reserved_pool_for(
+        &who,
+        launch(),
+        native(),
+        SEED_TOKEN,
+        SEED_NATIVE,
+        3,
+    )
+}
+
+#[test]
+fn canonical_pair_orders_native_before_with_id() {
+    // `seed_reserved_pool_for` does not depend on this, but `do_add_liquidity_for`
+    // does (it transfers pair.0 first). Pin it so an encoding change is noticed.
+    let (a, b) = VitreusDex::canonical_pair(launch(), native());
+    assert_eq!(a, native());
+    assert_eq!(b, launch());
+    let (a, b) = VitreusDex::canonical_pair(native(), launch());
+    assert_eq!(a, native());
+    assert_eq!(b, launch());
+}
+
+#[test]
+fn reserved_asset_rejected_by_create_pool_for_every_caller() {
+    new_test_ext().execute_with(|| {
+        setup_reserved_asset();
+
+        // ManageOrigin (root) via the extrinsic, both pair orderings.
+        assert_noop!(
+            VitreusDex::create_pool(RuntimeOrigin::root(), native(), launch(), 3),
+            Error::<Test>::ReservedAsset
+        );
+        assert_noop!(
+            VitreusDex::create_pool(RuntimeOrigin::root(), launch(), native(), 3),
+            Error::<Test>::ReservedAsset
+        );
+        // Reserved against a non-native, non-reserved asset too.
+        assert_noop!(
+            VitreusDex::create_pool(RuntimeOrigin::root(), usdc(), launch(), 3),
+            Error::<Test>::ReservedAsset
+        );
+        // Signed origin is rejected before it reaches the guard (BadOrigin), so
+        // check the origin-free paths explicitly: the PoolManager trait ...
+        assert_noop!(
+            <VitreusDex as PoolManager<u128, NativeOrAssetId, u128, u64>>::create_pool(
+                native(),
+                launch(),
+                3
+            ),
+            Error::<Test>::ReservedAsset
+        );
+        // ... and the bare helper.
+        assert_noop!(
+            VitreusDex::do_create_pool(launch(), native(), 3),
+            Error::<Test>::ReservedAsset
+        );
+        // The guard runs before the fee-tier check, so a bad tier does not mask it.
+        assert_noop!(
+            VitreusDex::do_create_pool(launch(), native(), 7),
+            Error::<Test>::ReservedAsset
+        );
+
+        assert!(!VitreusDex::pool_exists(native(), launch()));
+        assert!(Pools::<Test>::get(VitreusDex::canonical_pair(native(), launch())).is_none());
+
+        // Non-reserved pairs are unaffected.
+        assert_ok!(VitreusDex::create_pool(RuntimeOrigin::root(), usdc(), vnrg(), 3));
+    });
+}
+
+#[test]
+fn seed_reserved_pool_creates_pool_deposits_stored_amounts_and_locks_forever() {
+    new_test_ext().execute_with(|| {
+        setup_reserved_asset();
+        let key = VitreusDex::canonical_pair(native(), launch());
+        let pool_account = VitreusDex::pool_account_for(native(), launch());
+        // Fresh pool account: no native balance, so a token-first transfer
+        // would fail for this non-sufficient asset. The seed must go quote-first.
+        assert_eq!(Balances::free_balance(pool_account), 0);
+
+        let native_before = Balances::free_balance(ESCROW);
+        let token_before = Assets::balance(LAUNCH_ID, ESCROW);
+
+        let shares = seed(ESCROW).expect("seed");
+
+        let expected_total = isqrt_u256(SEED_NATIVE, SEED_TOKEN);
+        assert_eq!(shares, expected_total - u128::from(crate::MINIMUM_LIQUIDITY));
+        assert_eq!(TotalLiquidity::<Test>::get(key.clone()), Some(expected_total));
+
+        // Exactly the stored amounts left the escrow and sit in the pool account.
+        assert_eq!(native_before - Balances::free_balance(ESCROW), SEED_NATIVE);
+        assert_eq!(token_before - Assets::balance(LAUNCH_ID, ESCROW), SEED_TOKEN);
+        assert_eq!(Balances::free_balance(pool_account), SEED_NATIVE);
+        assert_eq!(Assets::balance(LAUNCH_ID, pool_account), SEED_TOKEN);
+
+        let pool = Pools::<Test>::get(key.clone()).unwrap();
+        assert_eq!(pool.pool_account, pool_account);
+        assert_eq!(pool.fee_tier, 3);
+        assert_eq!((pool.reserve_a, pool.reserve_b), (SEED_NATIVE, SEED_TOKEN));
+
+        // Position: owned by the seeder, locked to the max block.
+        let pos = LiquidityPositions::<Test>::get(ESCROW, key.clone()).expect("position");
+        assert_eq!(pos.shares, shares);
+        assert_eq!(pos.locked_until, Some(u64::MAX));
+
+        // Nobody else holds a position in this pool.
+        assert_eq!(LiquidityPositions::<Test>::iter_prefix(ALICE).count(), 0);
+        assert_eq!(LiquidityPositions::<Test>::iter_prefix(BOB).count(), 0);
+
+        // The lock holds at the last representable block.
+        System::set_block_number(u64::MAX - 1);
+        assert_noop!(
+            VitreusDex::remove_liquidity(RuntimeOrigin::signed(ESCROW), native(), launch(), 1, 0, 0),
+            Error::<Test>::PoolLocked
+        );
+        // ... and cannot be shortened through either lock path (D3).
+        assert_noop!(
+            VitreusDex::lock_liquidity(RuntimeOrigin::signed(ESCROW), native(), launch(), 10),
+            Error::<Test>::LockCannotBeShortened
+        );
+        assert_noop!(
+            <VitreusDex as PoolManager<u128, NativeOrAssetId, u128, u64>>::lock_liquidity_for(
+                &ESCROW,
+                native(),
+                launch(),
+                u64::MAX - 1
+            ),
+            Error::<Test>::LockCannotBeShortened
+        );
+        assert_eq!(
+            LiquidityPositions::<Test>::get(ESCROW, key.clone()).unwrap().locked_until,
+            Some(u64::MAX)
+        );
+
+        System::assert_has_event(
+            Event::ReservedPoolSeeded {
+                who: ESCROW,
+                asset: launch(),
+                quote: native(),
+                amount_asset: SEED_TOKEN,
+                amount_quote: SEED_NATIVE,
+                shares,
+            }
+            .into(),
+        );
+        System::assert_has_event(
+            Event::LiquidityLocked { who: ESCROW, pool: key, locked_until: u64::MAX }.into(),
+        );
+
+        // Post-seed, ordinary LPs may join through the normal path.
+        assert_ok!(VitreusDex::add_liquidity(
+            RuntimeOrigin::signed(BOB),
+            native(),
+            launch(),
+            UNIT,
+            u128::MAX / 4,
+            0,
+            0,
+        ));
+    });
+}
+
+#[test]
+fn seed_sweeps_pre_seed_donations_so_opening_price_is_stored_ratio() {
+    new_test_ext().execute_with(|| {
+        setup_reserved_asset();
+        let key = VitreusDex::canonical_pair(native(), launch());
+        let pool_account = VitreusDex::pool_account_for(native(), launch());
+
+        // The treasury exists (has a provider) so it can receive the token.
+        assert_ok!(Balances::force_set_balance(RuntimeOrigin::root(), TREASURY, UNIT));
+
+        // FM-02: park balances at the predictable pool address before seeding.
+        // Token-heavy donation would push the opening price DOWN if absorbed;
+        // native would push it UP. Use both.
+        let donated_token = 3 * SEED_TOKEN; // 6·10^26, would triple the token reserve if absorbed
+        let donated_native = 5 * UNIT;
+        assert_ok!(Balances::transfer_allow_death(
+            RuntimeOrigin::signed(BOB),
+            pool_account,
+            donated_native
+        ));
+        assert_ok!(Assets::transfer(RuntimeOrigin::signed(BOB), LAUNCH_ID, pool_account, donated_token));
+        assert_eq!(Balances::free_balance(pool_account), donated_native);
+        assert_eq!(Assets::balance(LAUNCH_ID, pool_account), donated_token);
+        assert_eq!(Balances::free_balance(TREASURY), UNIT);
+        assert_eq!(Assets::balance(LAUNCH_ID, TREASURY), 0);
+
+        let shares = seed(ESCROW).expect("seed");
+
+        // Donations landed in Treasury, not in the pool.
+        assert_eq!(Balances::free_balance(TREASURY), UNIT + donated_native);
+        assert_eq!(Assets::balance(LAUNCH_ID, TREASURY), donated_token);
+        assert_eq!(Balances::free_balance(pool_account), SEED_NATIVE);
+        assert_eq!(Assets::balance(LAUNCH_ID, pool_account), SEED_TOKEN);
+        System::assert_has_event(
+            Event::PreSeedBalanceSwept {
+                pool: key.clone(),
+                asset: launch(),
+                amount: donated_token,
+                to: TREASURY,
+            }
+            .into(),
+        );
+        System::assert_has_event(
+            Event::PreSeedBalanceSwept {
+                pool: key.clone(),
+                asset: native(),
+                amount: donated_native,
+                to: TREASURY,
+            }
+            .into(),
+        );
+
+        // Tracked reserves and shares reflect only the stored amounts.
+        let pool = Pools::<Test>::get(key.clone()).unwrap();
+        assert_eq!((pool.reserve_a, pool.reserve_b), (SEED_NATIVE, SEED_TOKEN));
+        assert_eq!(shares, isqrt_u256(SEED_NATIVE, SEED_TOKEN) - u128::from(crate::MINIMUM_LIQUIDITY));
+
+        // The decisive check: the first swap runs `sync_reserves`, which reads
+        // the pool account's live balances. If the donation had been left in
+        // place it would be absorbed here and the fill would differ from the
+        // constant-product quote on the stored reserves.
+        let amount_in = 100 * UNIT;
+        let after_fee = amount_in - amount_in * 3 / 1_000;
+        let expected_out = mul_div_u256(SEED_TOKEN, after_fee, SEED_NATIVE + after_fee);
+        let bob_before = Assets::balance(LAUNCH_ID, BOB);
+        assert_ok!(VitreusDex::swap_exact_tokens_for_tokens(
+            RuntimeOrigin::signed(BOB),
+            native(),
+            launch(),
+            amount_in,
+            expected_out,
+            BOB,
+        ));
+        assert_eq!(Assets::balance(LAUNCH_ID, BOB) - bob_before, expected_out);
+        let pool = Pools::<Test>::get(key).unwrap();
+        assert_eq!(pool.reserve_a, SEED_NATIVE + after_fee);
+        assert_eq!(pool.reserve_b, SEED_TOKEN - expected_out);
+    });
+}
+
+#[test]
+fn seed_is_transactional_when_sweep_or_deposit_fails() {
+    new_test_ext().execute_with(|| {
+        setup_reserved_asset();
+        let pool_account = VitreusDex::pool_account_for(native(), launch());
+        assert_ok!(Balances::transfer_allow_death(RuntimeOrigin::signed(BOB), pool_account, 5 * UNIT));
+
+        // An escrow that cannot fund the deposit: the sweep must not stick.
+        assert_ok!(Balances::force_set_balance(RuntimeOrigin::root(), ESCROW, 1));
+        assert!(seed(ESCROW).is_err());
+        assert_eq!(Balances::free_balance(pool_account), 5 * UNIT);
+        assert_eq!(Balances::free_balance(TREASURY), 0);
+        assert!(!VitreusDex::pool_exists(native(), launch()));
+        assert!(Pools::<Test>::get(VitreusDex::canonical_pair(native(), launch())).is_none());
+    });
+}
+
+#[test]
+fn seed_rejects_wrong_assets_double_seed_and_mismatched_adoption() {
+    new_test_ext().execute_with(|| {
+        setup_reserved_asset();
+        let s = |asset, quote, fee| {
+            <VitreusDex as crate::ReservedPoolSeeder<u128, NativeOrAssetId, u128, u64>>::seed_reserved_pool_for(
+                &ESCROW, asset, quote, SEED_TOKEN, SEED_NATIVE, fee,
+            )
+        };
+
+        // Non-reserved asset: the seeder must not be a way around ManageOrigin.
+        assert_noop!(s(usdc(), native(), 3), Error::<Test>::NotReservedAsset);
+        // Reserved quote.
+        assert_noop!(s(launch(), NativeOrAssetId::WithId(RESERVED_ASSET_BASE + 2), 3), Error::<Test>::NotReservedAsset);
+        // Same asset twice.
+        assert_noop!(s(launch(), launch(), 3), Error::<Test>::NotReservedAsset);
+        // Bad fee tier.
+        assert_noop!(s(launch(), native(), 7), Error::<Test>::InvalidFeeTier);
+        // Zero amounts.
+        assert_noop!(
+            <VitreusDex as crate::ReservedPoolSeeder<u128, NativeOrAssetId, u128, u64>>::seed_reserved_pool_for(
+                &ESCROW, launch(), native(), 0, SEED_NATIVE, 3,
+            ),
+            Error::<Test>::ZeroAmount
+        );
+
+        // Adoption of an empty pool record (can only arise from storage that
+        // predates the guard; simulate it directly). Fee tier must match.
+        let key = VitreusDex::canonical_pair(native(), launch());
+        Pools::<Test>::insert(
+            key.clone(),
+            crate::PoolInfo {
+                reserve_a: 0,
+                reserve_b: 0,
+                fee_tier: 10,
+                total_fees_collected: 0,
+                pool_account: VitreusDex::pool_account_for(native(), launch()),
+            },
+        );
+        TotalLiquidity::<Test>::insert(key.clone(), 0u128);
+        assert_noop!(s(launch(), native(), 3), Error::<Test>::InvalidFeeTier);
+        assert_ok!(s(launch(), native(), 10));
+        assert_eq!(Pools::<Test>::get(key.clone()).unwrap().reserve_b, SEED_TOKEN);
+
+        // Second seed: the pool has shares now.
+        assert_noop!(s(launch(), native(), 10), Error::<Test>::PoolAlreadySeeded);
+    });
+}
+
+#[test]
+fn lock_can_be_extended_but_never_shortened() {
+    new_test_ext().execute_with(|| {
+        assert_ok!(VitreusDex::do_create_pool(usdc(), vnrg(), 10));
+        assert_ok!(VitreusDex::do_add_liquidity_for(&BOB, usdc(), vnrg(), 10_000, 40_000, 0, 0));
+
+        // Unlocked → 50.
+        assert_ok!(VitreusDex::lock_liquidity(RuntimeOrigin::signed(BOB), usdc(), vnrg(), 50));
+        assert_eq!(LiquidityPositions::<Test>::get(BOB, pair()).unwrap().locked_until, Some(50));
+        // Same block: idempotent.
+        assert_ok!(VitreusDex::lock_liquidity(RuntimeOrigin::signed(BOB), usdc(), vnrg(), 50));
+        // Extend.
+        assert_ok!(VitreusDex::lock_liquidity(RuntimeOrigin::signed(BOB), usdc(), vnrg(), 80));
+        assert_eq!(LiquidityPositions::<Test>::get(BOB, pair()).unwrap().locked_until, Some(80));
+        // Shorten via extrinsic and via trait: rejected, state unchanged.
+        assert_noop!(
+            VitreusDex::lock_liquidity(RuntimeOrigin::signed(BOB), usdc(), vnrg(), 79),
+            Error::<Test>::LockCannotBeShortened
+        );
+        assert_noop!(
+            <VitreusDex as PoolManager<u128, NativeOrAssetId, u128, u64>>::lock_liquidity_for(
+                &BOB,
+                usdc(),
+                vnrg(),
+                0
+            ),
+            Error::<Test>::LockCannotBeShortened
+        );
+        assert_eq!(LiquidityPositions::<Test>::get(BOB, pair()).unwrap().locked_until, Some(80));
+
+        // Once the lock has expired it can still only move forward, not back
+        // to a value below the old one.
+        System::set_block_number(100);
+        assert_noop!(
+            VitreusDex::lock_liquidity(RuntimeOrigin::signed(BOB), usdc(), vnrg(), 60),
+            Error::<Test>::LockCannotBeShortened
+        );
+        assert_ok!(VitreusDex::lock_liquidity(RuntimeOrigin::signed(BOB), usdc(), vnrg(), 200));
+    });
+}
+
+#[test]
+fn seed_burns_pre_seed_donation_when_recipient_cannot_receive_it() {
+    // Name kept from the earlier burn-fallback design; the behaviour is now
+    // the opposite: a recipient that cannot receive the swept asset makes the
+    // seed fail loudly, so a mis-wired `ExcessRecipient` cannot pass as
+    // correct operation. Nothing is burned, nothing is created.
+    new_test_ext().execute_with(|| {
+        setup_reserved_asset();
+        let key = VitreusDex::canonical_pair(native(), launch());
+        let pool_account = VitreusDex::pool_account_for(native(), launch());
+        // TREASURY has no native balance, so it cannot open an account for the
+        // non-sufficient launch asset.
+        assert_eq!(Balances::free_balance(TREASURY), 0);
+        // A donor has to give the pool account a provider before it can hold
+        // the non-sufficient token, so native goes in first (as an attacker would).
+        let donated_native = 5 * UNIT;
+        let donated_token = 3 * SEED_TOKEN;
+        assert_ok!(Balances::transfer_allow_death(RuntimeOrigin::signed(BOB), pool_account, donated_native));
+        assert_ok!(Assets::transfer(RuntimeOrigin::signed(BOB), LAUNCH_ID, pool_account, donated_token));
+        let issuance_before = Assets::total_supply(LAUNCH_ID);
+        let escrow_native_before = Balances::free_balance(ESCROW);
+        let escrow_token_before = Assets::balance(LAUNCH_ID, ESCROW);
+
+        assert_noop!(seed(ESCROW), Error::<Test>::ExcessRecipientCannotReceive);
+
+        // No pool, no position, nothing burned, nothing moved.
+        assert!(Pools::<Test>::get(key.clone()).is_none());
+        assert!(TotalLiquidity::<Test>::get(key.clone()).is_none());
+        assert!(LiquidityPositions::<Test>::get(ESCROW, key).is_none());
+        assert_eq!(Assets::total_supply(LAUNCH_ID), issuance_before);
+        assert_eq!(Assets::balance(LAUNCH_ID, pool_account), donated_token);
+        assert_eq!(Balances::free_balance(pool_account), donated_native);
+        assert_eq!(Assets::balance(LAUNCH_ID, TREASURY), 0);
+        assert_eq!(Balances::free_balance(TREASURY), 0);
+        assert_eq!(Balances::free_balance(ESCROW), escrow_native_before);
+        assert_eq!(Assets::balance(LAUNCH_ID, ESCROW), escrow_token_before);
+
+        // FM-11 recovery: fix the recipient (give it a provider) and retry —
+        // permissionlessly, with no other state change needed.
+        assert_ok!(Balances::force_set_balance(RuntimeOrigin::root(), TREASURY, UNIT));
+        assert_ok!(seed(ESCROW));
+        assert_eq!(Assets::balance(LAUNCH_ID, TREASURY), donated_token);
+        assert_eq!(Balances::free_balance(TREASURY), UNIT + donated_native);
+        assert_eq!(Assets::balance(LAUNCH_ID, pool_account), SEED_TOKEN);
+        assert_eq!(Balances::free_balance(pool_account), SEED_NATIVE);
+    });
+}

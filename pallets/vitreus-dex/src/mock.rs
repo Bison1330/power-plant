@@ -18,6 +18,10 @@ pub const CHARLIE: u128 = 3;
 
 pub const USDC_ID: u32 = 1;
 pub const VNRG_ID: u32 = 2;
+/// Account that receives pre-seed sweeps (stands in for the treasury).
+pub const TREASURY: u128 = 99;
+/// Asset ids at or above this are "reserved" in the mock (launchpad range).
+pub const RESERVED_ASSET_BASE: u32 = 1_000;
 
 construct_runtime!(
     pub enum Test
@@ -83,6 +87,15 @@ parameter_types! {
     pub const USDC: u32 = USDC_ID;
     pub const VNRG: u32 = VNRG_ID;
     pub EnergyAsset: NativeOrAssetId = NativeOrAssetId::WithId(VNRG_ID);
+    pub const ExcessRecipient: u128 = TREASURY;
+}
+
+/// Mock reserved range: every `WithId(id)` with `id >= RESERVED_ASSET_BASE`.
+pub struct ReservedAssets;
+impl frame_support::traits::Contains<NativeOrAssetId> for ReservedAssets {
+    fn contains(a: &NativeOrAssetId) -> bool {
+        matches!(a, NativeOrAssetId::WithId(id) if *id >= RESERVED_ASSET_BASE)
+    }
 }
 
 impl Config for Test {
@@ -94,6 +107,8 @@ impl Config for Test {
     type Assets = NativeAndAssets;
     type NativeAsset = NativeAsset;
     type EnergyAsset = EnergyAsset;
+    type ReservedAssets = ReservedAssets;
+    type ExcessRecipient = ExcessRecipient;
     type DefaultBidWindowBlocks = ConstU64<10>;
     type DefaultSettlementWindowBlocks = ConstU64<5>;
     type DefaultSolverBondAmount = ConstU128<1_000_000_000_000>;

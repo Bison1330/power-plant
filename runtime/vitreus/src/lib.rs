@@ -1135,6 +1135,24 @@ parameter_types! {
     pub const DefaultSolverBondAmount: Balance = 1_000 * UNITS;
 }
 
+/// Asset ids `[2^64, 2^65)` are reserved for launchpad tokens. Pools for them
+/// can only be created through `ReservedPoolSeeder` (D2 of LAUNCHPAD_SPEC.md).
+pub const LAUNCHPAD_ASSET_ID_START: u128 = 1u128 << 64;
+pub const LAUNCHPAD_ASSET_ID_END: u128 = 1u128 << 65;
+
+pub struct LaunchpadReservedAssets;
+impl frame_support::traits::Contains<NativeOrAssetId> for LaunchpadReservedAssets {
+    fn contains(asset: &NativeOrAssetId) -> bool {
+        match asset {
+            NativeOrAssetId::WithId(id) => {
+                let id = u128::from(*id);
+                (LAUNCHPAD_ASSET_ID_START..LAUNCHPAD_ASSET_ID_END).contains(&id)
+            },
+            NativeOrAssetId::Native => false,
+        }
+    }
+}
+
 impl pallet_vitreus_dex::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type ManageOrigin = EnsureRoot<AccountId>;
@@ -1144,6 +1162,8 @@ impl pallet_vitreus_dex::Config for Runtime {
     type Assets = NativeAndAssets;
     type NativeAsset = NativeAsset;
     type EnergyAsset = VNRG;
+    type ReservedAssets = LaunchpadReservedAssets;
+    type ExcessRecipient = xcm_config::TreasuryAccount;
     type DefaultBidWindowBlocks = DefaultBidWindowBlocks;
     type DefaultSettlementWindowBlocks = DefaultSettlementWindowBlocks;
     type DefaultSolverBondAmount = DefaultSolverBondAmount;
