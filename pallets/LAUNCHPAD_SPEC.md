@@ -1,6 +1,6 @@
 # pallet-launchpad — Design Specification
 
-**Status:** design, v1 · **Target branch:** `feature/solver-marketplace` (DEX at `5ea3008`; PoolManager trait from `f3350e4`, D1 landed in `ce34a05`, D2+D3 landed in `5ea3008`) · **Date:** 2026-09-12
+**Status:** design, v1 · **Target branch:** `feature/solver-marketplace` (DEX at `c7d3752`; PoolManager trait from `f3350e4`, D1 in `ce34a05`, D2+D3 in `5ea3008`, D5 in `c7d3752`) · **Date:** 2026-09-13
 
 A bonding-curve token launchpad as a FRAME pallet. Each launch mints a fixed-supply `pallet_assets` token into a pallet-owned escrow, sells 80% of it along a constant-product curve quoted in VTRS, and on sell-out seeds a permanently locked VitreusDEX pool with the raised VTRS and the remaining 20%. No party — creator, governance, or the pallet itself — has a path to withdraw curve or pool funds.
 
@@ -32,9 +32,9 @@ Scope decisions fixed by the owner:
 
 All of `S`, `SELLABLE`, `RESERVED`, `VT_FLOOR`, `LAUNCH_ASSET_BASE` are `#[pallet::constant]` items of `Config`, so they are visible in metadata and can only change by runtime upgrade. `V_t` is not stored; it is `VT_FLOOR + SELLABLE`.
 
-Why these numbers: with sellable fraction `s = 0.8` and a start-to-graduation price multiple `m = 16`, `V_t = s·S·√m/(√m−1)` and `V_q = T/(√m−1)`. At sell-out the marginal price is `(V_q + R)/VT_FLOOR` and the pool opens at `R/RESERVED`; with `R ≈ 3V_q` these agree to within `4.2 × 10^-10` relative (the residue is the integer rounding of `VT_FLOOR`). Invariant I7 pins that tolerance.
+Why these numbers: with sellable fraction `s = 0.8` and a start-to-graduation price multiple `m = 16`, `V_t = s·S·√m/(√m−1)` and `V_q = T/(√m−1)`. At sell-out the marginal price is `(V_q + R)/VT_FLOOR` and the pool opens at `R/RESERVED`; with `R ≈ 3V_q` these agree to within `1.25 × 10^-9` relative (`V_t/VT_FLOOR = 4 − 1/266_666_667`; the residue is the integer rounding of `VT_FLOOR`). Invariant I7 pins a `10^-6` tolerance, comfortably above that.
 
-**Escrow account** for launch `id`: `PALLET_ID.into_sub_account_truncating(("launch", id))`. It holds the launch's VTRS (raised amount + unclaimed creator fees + ED) and its unsold tokens. It is the `owner`, `issuer`, `admin` and `freezer` of the launch asset. It has no signing key.
+**Escrow account** for launch `id`: `PALLET_ID.into_sub_account_truncating(id)` — the bare 8-byte id, not a labelled tuple: on the production 20-byte `AccountId` the derivation keeps `"modl"` + 8-byte PalletId + only 8 bytes of seed, so `("launch", id)` would leave two bytes of the id and collide after 65 536 launches. It holds the launch's VTRS (raised amount + unclaimed creator fees + ED) and its unsold tokens. It is the `owner`, `issuer`, `admin` and `freezer` of the launch asset. It has no signing key.
 
 **Asset id** for launch `id`: `LAUNCH_ASSET_BASE + id`. The range `[2^64, 2^65)` is reserved for this pallet (§5, I12).
 
@@ -73,7 +73,7 @@ pub type CreationPaused<T: Config> = StorageValue<_, bool, ValueQuery>;   // rea
 | `curve_fee_bps` | `0 ≤ fee ≤ MaxCurveFeeBps = 500` | 5% cap; peers run 1–2% |
 | `protocol_share_bps` | `MinProtocolShareBps = 5_000 ≤ x ≤ 10_000` | creator share ≤ protocol share so wash-trading to farm creator fees is net-negative (FM-12) |
 | `pool_fee_tier` | `∈ {1, 3, 10}` | DEX whitelist |
-| `creation_fee` | `≥ MinCreationFee` where `MinCreationFee = 2 × ExistentialDeposit + AssetDeposit + MetadataDepositBase + 2 × StringLimit × MetadataDepositPerByte` | must fund escrow ED, pool-account ED headroom, and `pallet_assets` deposits paid by escrow (FM-15) |
+| `creation_fee` | `≥ MinCreationFee` where `MinCreationFee = 2 × ExistentialDeposit + MetadataDepositBase + 2 × StringLimit × MetadataDepositPerByte` | must fund escrow ED, pool-account ED headroom, and the `pallet_assets` metadata deposits paid by escrow (FM-15). No `AssetDeposit`: `fungibles::Create::create` is the force-create path and reserves none. |
 
 **Authority:** `T::ManageOrigin` (runtime: `EnsureRoot` or `MoreThanHalfCouncil`, same as `pallet_vitreus_dex::ManageOrigin`). Changes affect only launches created afterwards (FM-10).
 
@@ -156,48 +156,49 @@ There is no per-user storage. Token holdings are `pallet_assets` balances.
 
 ### 1.5 Config
 
+The pallet is bound on `pallet_vitreus_dex::Config` so that DEX errors can be matched by type (the rescue path maps the DEX's `SlippageExceeded` to `PriceOutOfTolerance`) and so `Balance` / `AssetKind` are the DEX's own types rather than redeclared. Two associated types are renamed to avoid clashing with the DEX Config's `Assets` (its native-or-asset union) and `ManageOrigin`.
+
 ```rust
-pub trait Config: frame_system::Config {
+pub type BalanceOf<T>   = <T as pallet_vitreus_dex::Config>::Balance;
+pub type AssetKindOf<T> = <T as pallet_vitreus_dex::Config>::AssetKind;
+
+pub trait Config: frame_system::Config + pallet_vitreus_dex::Config<Balance: From<u128> + Into<u128>> {
     type RuntimeEvent: ...;
-    type ManageOrigin: EnsureOrigin<Self::RuntimeOrigin>;
-    type Balance: Balance + From<u128> + Into<u128>;
-    type AssetId: Parameter + MaxEncodedLen + Copy + From<u128> + Into<u128>;    // runtime: u128
+    type LaunchManageOrigin: EnsureOrigin<Self::RuntimeOrigin>;
+    type AssetId: Parameter + MaxEncodedLen + Copy + AtLeast32BitUnsigned;   // runtime: u128
 
     /// VTRS.
-    type Currency: fungible::Inspect<Self::AccountId, Balance = Self::Balance>
-                 + fungible::Mutate<Self::AccountId>;
+    type Currency: fungible::Inspect<Self::AccountId, Balance = BalanceOf<Self>> + fungible::Mutate<Self::AccountId>;
     /// pallet_assets main instance.
-    type Assets: fungibles::Inspect<Self::AccountId, AssetId = Self::AssetId, Balance = Self::Balance>
-               + fungibles::Mutate<Self::AccountId>
-               + fungibles::Create<Self::AccountId>
-               + fungibles::metadata::Mutate<Self::AccountId>;
+    type LaunchAssets: fungibles::Inspect<Self::AccountId, AssetId = Self::AssetId, Balance = BalanceOf<Self>>
+                     + fungibles::Mutate<Self::AccountId>
+                     + fungibles::Create<Self::AccountId>
+                     + fungibles::metadata::Mutate<Self::AccountId>;
 
-    /// VitreusDEX. AssetKind is NativeOrWithId<AssetId> in the runtime.
-    type AssetKind: Parameter + MaxEncodedLen;
-    type NativeAssetKind: Get<Self::AssetKind>;
-    type IntoAssetKind: Convert<Self::AssetId, Self::AssetKind>;
-    type Dex: PoolManager<Self::AccountId, Self::AssetKind, Self::Balance, BlockNumberFor<Self>>
-            + ReservedPoolSeeder<...>;     // §5.2 — DEX D2, landed in 5ea3008
+    type NativeAssetKind: Get<AssetKindOf<Self>>;
+    type IntoAssetKind: Convert<Self::AssetId, AssetKindOf<Self>>;
+    /// Trait-typed: the launchpad only calls the PoolManager / ReservedPoolSeeder surface.
+    type Dex: PoolManager<Self::AccountId, AssetKindOf<Self>, BalanceOf<Self>, BlockNumberFor<Self>>
+            + ReservedPoolSeeder<Self::AccountId, AssetKindOf<Self>, BalanceOf<Self>, BlockNumberFor<Self>>;
 
     type Treasury: Get<Self::AccountId>;
     type PalletId: Get<PalletId>;
 
-    #[pallet::constant] type TotalSupply: Get<Self::Balance>;         // S
-    #[pallet::constant] type Sellable: Get<Self::Balance>;            // SELLABLE
-    #[pallet::constant] type VirtualTokenFloor: Get<Self::Balance>;   // VT_FLOOR
-    #[pallet::constant] type LaunchAssetBase: Get<Self::AssetId>;     // 1 << 64
-    #[pallet::constant] type MinGraduationTarget: Get<Self::Balance>;
-    #[pallet::constant] type MaxGraduationTarget: Get<Self::Balance>;
-    #[pallet::constant] type MaxCurveFeeBps: Get<u16>;               // 500
-    #[pallet::constant] type MinProtocolShareBps: Get<u16>;          // 5_000
-    #[pallet::constant] type MinCreationFee: Get<Self::Balance>;
-    #[pallet::constant] type RescueDelay: Get<BlockNumberFor<Self>>; // 7 days = 100_800 blocks at 6 s
-    #[pallet::constant] type StringLimit: Get<u32>;                  // ≤ pallet_assets StringLimit (50)
+    #[pallet::constant] type TotalSupply: Get<BalanceOf<Self>>;         // S
+    #[pallet::constant] type Sellable: Get<BalanceOf<Self>>;            // SELLABLE
+    #[pallet::constant] type VirtualTokenFloor: Get<BalanceOf<Self>>;   // VT_FLOOR
+    #[pallet::constant] type LaunchAssetBase: Get<Self::AssetId>;       // 1 << 64
+    #[pallet::constant] type MinGraduationTarget: Get<BalanceOf<Self>>;
+    #[pallet::constant] type MaxGraduationTarget: Get<BalanceOf<Self>>;
+    #[pallet::constant] type MaxCurveFeeBps: Get<u16>;                 // 500
+    #[pallet::constant] type MinProtocolShareBps: Get<u16>;            // 5_000
+    #[pallet::constant] type MinCreationFee: Get<BalanceOf<Self>>;
+    #[pallet::constant] type RescueDelay: Get<BlockNumberFor<Self>>;   // 7 days = 100_800 blocks at 6 s
+    #[pallet::constant] type StringLimit: Get<u32>;                    // ≤ pallet_assets StringLimit (50)
+    #[pallet::constant] type DefaultLaunchParams: Get<LaunchParams<BalanceOf<Self>>>;
 
     /// Anti-snipe hook, v1 = (). See §2.7.
-    type BuyHook: OnCurveBuy<Self::AccountId, Self::Balance, BlockNumberFor<Self>>;
-
-    type WeightInfo: WeightInfo;
+    type BuyHook: OnCurveBuy<Self::AccountId, BalanceOf<Self>, BlockNumberFor<Self>>;
 }
 ```
 
@@ -442,7 +443,7 @@ Expose `quote_buy(launch_id, q_in)` and `quote_sell(launch_id, t_in)` as runtime
 
 ### 3.6 Quotability at the bounds
 
-With `T = MinGraduationTarget = 3·10^18`, `V_q = 10^18`, `Tk = V_t = 1.067·10^27`: a 1-unit buy gives `Tk_new = ceil(k/(Q+1)) ≈ Tk − 1.07·10^9` ⇒ `t_out ≈ 10^9 > 0`. A 1-unit sell of tokens returns `q_gross = 0` ⇒ `Unquotable`; that is correct (the tokens are worth less than 1 VTRS-wei) and rejecting it is the FM-09 rule "never 0 out for >0 in on the pool's side; never >0 out for 0 in on the trader's side".
+With a non-zero fee, a 1-unit buy is consumed entirely by the rounded-up fee (`fee = ceil(1 × f / BPS) = 1`, `q_net = 0`) and is `Unquotable` at any `T` — the pool-favouring answer, not free tokens. With `T = MinGraduationTarget = 3·10^18`, `V_q = 10^18`, `Tk = V_t = 1.067·10^27`, a 100-unit buy (fee 1, net 99) delivers `≈ 10^11` token units. A 1-unit sell of tokens returns `q_gross = 0` ⇒ `Unquotable`; that is correct (the tokens are worth less than 1 VTRS-wei) and rejecting it is the FM-09 rule "never 0 out for >0 in on the pool's side; never >0 out for 0 in on the trader's side".
 
 ---
 
@@ -514,7 +515,7 @@ Why not fail the buy instead: a revert would let a buyer probe for a DEX conditi
 
 | Cause | Can it happen with the reserved-asset guard (§5.2) in place? | Recovery |
 |---|---|---|
-| Pool for `(asset, native)` exists **with** liquidity | Only via governance misuse of the DEX (root `create_pool` is rejected for reserved assets by D2, so it would require a runtime change) | `force_seed_into_existing_pool` after `RescueDelay`; deposits `(RESERVED, real_quote)` as a normal `add_liquidity_for` with `amount_min` set so the realised opening price is within `max_price_deviation_bps` of `real_quote / RESERVED`; locks; excess tokens/VTRS the DEX did not consume stay in escrow and are swept to Treasury. If tolerance fails the call fails and can be retried with a different tolerance — never with a bypass. |
+| Pool for `(asset, native)` exists **with** liquidity | Only via governance misuse of the DEX (root `create_pool` is rejected for reserved assets by D2, so it would require a runtime change) | `force_seed_into_existing_pool` after `RescueDelay`; deposits `(RESERVED, real_quote)` as a normal `add_liquidity_for` with `amount_min` set so the realised opening price is within `max_price_deviation_bps` of `real_quote / RESERVED`; locks; excess tokens/VTRS the DEX did not consume stay in escrow and are swept to Treasury. The DEX's `SlippageExceeded` is matched by type (hence the `pallet_vitreus_dex::Config` bound) and surfaced as `PriceOutOfTolerance`; the call can be retried with a different tolerance — never with a bypass. |
 | Pool exists with zero liquidity | Yes (someone created it via a future DEX path) | `do_seed` handles it: D2 treats a zero-share pool as fresh after sweeping its account |
 | DEX `InsufficientInitialLiquidity` | No — `create_launch` preflight (§2.1.7) uses the same formula | n/a; would indicate DEX constant changed under a live launch ⇒ governance can bump the DEX minimum only after `RescueDelay`-style review, out of scope |
 | DEX arithmetic overflow | No since `ce34a05` (D1) | Regression guard: test `fm11_seed_overflow_is_impossible` |
@@ -567,8 +568,8 @@ I11 Assets::total_issuance(asset) == S for every launch, forever. Assets::owner(
 I12 NextLaunchId is strictly increasing; asset_id(id) == LaunchAssetBase + id; AssetToLaunch is a bijection
     onto Launches; no asset in [LaunchAssetBase, LaunchAssetBase + 2^64) exists that is not in AssetToLaunch.
 
-I13 For every buy: tokens_out × (Q_before + q_net) ≤ k_before  (trader never gets more than the curve price)
-    For every sell: q_gross × (Tk_before + t_in) ≤ k_before
+I13 For every buy:  tokens_out × (Q_before + q_net) ≤ q_net × Tk_before   (trader never gets more than the constant-product price; ⇔ k does not decrease)
+    For every sell: q_gross × (Tk_before + t_in) ≤ t_in × Q_before
 ```
 
 ### 5.1 The DEX-side invariant that collapses FM-01 and FM-02
@@ -618,7 +619,9 @@ Who may call `seed_reserved_pool_for` is a runtime-wiring invariant: only `palle
 
 **D4 — OPEN, v2: per-pool fee routing.** At 5ea3008 100% of the swap fee stays in the pool's reserves. Because the launchpad's LP is locked forever, post-graduation fees accrue as pool depth, not as revenue to the treasury or creator. If the protocol is to *capture* ongoing trading fees (as opposed to compounding them), `PoolInfo` needs `protocol_fee_bps` / `creator_fee_bps` fields and `do_swap` must route those slices. The launchpad spec is written so that D4 can be added without touching launch state: `Launch.creator_fee_recipient` is the address the DEX would pay. Out of v1 scope.
 
-**D5 — note, no change:** `MINIMUM_LIQUIDITY = 1000` shares are burned on first deposit. At seed scale `isqrt(10^22 × 2·10^26) ≈ 1.4·10^24` shares, so the burn is 10^-21 of the position; ignore.
+**D5 — DONE in `c7d3752`: liquidity amounts and minimums must follow the canonical pair order.** At `5ea3008`, `do_add_liquidity_for` and `remove_liquidity` canonicalised the pair but left `amount_a`/`amount_b` and the minimums bound to the *caller's* argument positions, so `add_liquidity(USDC, VTRS, 1000, 1)` deposited 1000 on the VTRS side. User-facing, found by the launchpad rescue path. Fixed with `canonical_pair_with`, which reorders the values alongside the assets; `do_swap` already handled the flipped case and the seeder maps amounts explicitly. DEX tests: `d5_add_liquidity_non_canonical_order_maps_amounts_to_assets`, `d5_remove_liquidity_non_canonical_order_maps_minimums`, `d5_pool_manager_add_liquidity_for_non_canonical_order`.
+
+**D6 — note, no change:** `MINIMUM_LIQUIDITY = 1000` shares are burned on first deposit. At seed scale `isqrt(10^22 × 2·10^26) ≈ 1.4·10^24` shares, so the burn is 10^-21 of the position; ignore.
 
 ### 5.3 Runtime wiring
 
@@ -632,7 +635,7 @@ Who may call `seed_reserved_pool_for` is a runtime-wiring invariant: only `palle
 
 ## 6. Test plan
 
-Unit tests live in `pallets/launchpad/src/tests.rs` against a mock that includes the real `pallet_vitreus_dex` at `5ea3008` or later (D1–D3 landed) and `pallet_assets`. Property tests use `proptest` over trade sequences. Test names are stable identifiers; a test that cannot be made to fail before the mitigation is added is not a test.
+Unit tests live in `pallets/launchpad/src/tests.rs` against a mock that includes the real `pallet_vitreus_dex` (D1–D3 landed; D5 required for the rescue path), `pallet_assets` with signed creation (so FM-14 can squat an id), and utility/proxy/multisig for FM-05. The mock uses `AccountId32`: with `u64` ids every PalletId sub-account truncates to the same `"modlvtrs"` prefix and escrow, pool and DEX accounts collide. Property tests use an in-test xorshift generator over trade sequences (no `proptest` in the workspace). Test names are stable identifiers; a test that cannot be made to fail before the mitigation is added is not a test.
 
 ### 6.1 Failure-mode tests
 
@@ -656,13 +659,13 @@ Unit tests live in `pallets/launchpad/src/tests.rs` against a mock that includes
 | `fm10_params_bounds` | — | `set_params` with each field just outside its bound | Each fails `ParamsOutOfBounds`; each just inside succeeds. |
 | `fm11_seed_overflow_is_impossible` | `T = MaxGraduationTarget`; real DEX | Cross the curve | Seeding succeeds (regression guard for D1: this failed with `Overflow` before `ce34a05`). |
 | `fm11_every_complete_state_has_a_forward_path` | Enumerate seeding failure causes from §4.4 (mock each) | Cross the curve under each | For each: `phase == Complete` after the buy; either `graduate()` succeeds once the cause is removed, or `force_seed_into_existing_pool` succeeds after `RescueDelay` within tolerance; in no case does any balance leave escrow to anywhere but the pool or (excess) Treasury. |
-| `fm11_create_preflight_rejects_unseedable` | Mock DEX `MINIMUM_LIQUIDITY` raised above `isqrt(T × RESERVED)` | `create_launch` | Fails at create (`Unseedable`), not at graduation. |
+| `fm11_create_preflight_rejects_unseedable` | `MINIMUM_LIQUIDITY` is a DEX crate constant, so the guard is exercised directly | `ensure_seedable(1000, 1000)` (isqrt == 1000), `(1001, 1001)`, `(MinGraduationTarget, RESERVED)` | The first fails `Unseedable`, the others pass; a `create_launch` with in-bounds params cannot trip it. |
 | `fm12_wash_trading_is_net_negative` | Every `protocol_share_bps` in `[MinProtocolShareBps, 10_000]`, fee in `[1, MaxCurveFeeBps]` | Creator buys `x`, sells everything back, repeats 20 times, claims creator fees | `creator_fees_claimed < total_fees_paid_by_creator`; VTRS balance of creator strictly decreased. |
 | `fm13_dump_model_exposes_concentration` | Graduated launch; one account holds 30% of `SELLABLE` | Sell 100% into the pool | Realised price impact reported by DEX event equals the constant-product prediction (`(R·0.3·SELLABLE)/(RESERVED + 0.3·SELLABLE)` net of fee) — there is no on-chain mitigation; this test pins the number so the frontend's concentration warning can be checked against it. |
 | `fm14_asset_id_squatting` | Testnet config (`CreateOrigin = EnsureSigned`) | User creates asset `LaunchAssetBase + NextLaunchId` themselves, then `create_launch` | Fails `AssetIdTaken`; `NextLaunchId` unchanged; no partial state. Second case: user creates `LaunchAssetBase + NextLaunchId + 1` — launch `NextLaunchId` succeeds, the following one fails; governance can only skip by a migration that bumps `NextLaunchId` (assert no extrinsic does it). |
 | `fm14_asset_id_range_never_reused` (proptest) | Random sequence of creates | — | I12 holds; `asset_id(id) == Base + id`; `AssetToLaunch` bijective. |
 | `fm15_escrow_survives_full_sellback_and_claims` | Launch, buy, sell everything back, claim creator fees | — | Escrow account still exists; `Currency::balance(escrow) ≥ ED + reserved_deposits`; asset account of escrow intact; next buy works. Second case: creation fee set to exactly `MinCreationFee` — all steps still succeed. |
-| `fm15_pool_account_gets_native_before_asset` | Seed with a DEX mock that reverses transfer order | Cross the curve | Seeding fails `GraduationDeferred` (proves the ordering matters); with correct order succeeds. |
+| `fm15_pool_account_gets_native_before_asset` | Not written here: the transfer order is inside the DEX's seeder and the launchpad cannot reverse it | — | Covered by the DEX's `seed_reserved_pool_creates_pool_deposits_stored_amounts_and_locks_forever`, which seeds into a pool account with no native balance (a token-first order would fail). |
 | `fm16_name_symbol_not_enforced_on_chain` | Two launches with identical name/symbol | — | Both succeed (documents that dedupe is a frontend concern in v1). |
 
 ### 6.2 Invariant and lifecycle tests
@@ -670,7 +673,7 @@ Unit tests live in `pallets/launchpad/src/tests.rs` against a mock that includes
 - `inv_try_state_holds_after_random_sequences` (proptest): random interleaving of `create_launch`, `buy`, `sell`, `graduate`, `claim_creator_fees`, donations, `set_params`, across 3 launches; call `try_state` after every step.
 - `lifecycle_happy_path`: create with initial buy → 10 buyers → 3 sellers → crossing → Graduated; assert I7 tolerance `≤ 10^-6`, `quote_seeded ∈ [T·(1−10^-9), T]`, `tokens_seeded == RESERVED`, treasury received `Σ protocol_fee + creation_fee − deposits`.
 - `lifecycle_initial_buy_completes_curve`: `create_launch(initial_buy ≥ R + fee)` graduates in the create extrinsic.
-- `weights_crossing_buy_refunds_when_not_crossing`: post-dispatch weight of a non-crossing `buy` `< WeightInfo::buy_crossing()`.
+- `weights_crossing_buy_refunds_when_not_crossing`: post-dispatch weight of a non-crossing `buy` `< WeightInfo::buy_crossing()`. **Not written in v1** — weights are constants like the DEX crate's; see §8.
 - `dex_d1_u256_paths` (in the DEX crate): `add_liquidity`, `swap`, `remove_liquidity` with `(10^22, 2·10^26)` succeed and match a U256 reference computation.
 - `dex_d3_lock_only_extends` (in the DEX crate).
 
@@ -690,7 +693,8 @@ Errors: see §2 header; plus `ReservedAsset`, `PoolAlreadySeeded` surfaced from 
 
 ## 8. Open items for the implementer
 
-1. **D1–D3 are landed (`ce34a05`, `5ea3008`).** The DEX prerequisites for v1 are complete; launchpad integration tests should target `5ea3008` or later. D4 is v2.
+1. **D1–D3 and D5 are landed (`ce34a05`, `5ea3008`, `c7d3752`).** D4 is v2.
+1b. **Benchmarks and weights.** v1 ships constant weights (as the DEX crate does) and no `WeightInfo`; `weights_crossing_buy_refunds_when_not_crossing` from §6.2 stays unwritten until `buy` / `buy_crossing` are benchmarked and the non-crossing branch refunds. `try_state` and the runtime API are likewise not in v1.
 2. `fungibles::metadata::Mutate::set` in `pallet_assets` (stable2407) charges the metadata deposit from `from`; confirm the escrow's reserved-deposit accounting in §2.1.5 against the actual reserve amounts rather than the constants (use `Currency::balance` before/after).
 3. `with_storage_layer` inside a `#[transactional]` extrinsic: confirm the nested layer commits independently (it does in FRAME ≥ polkadot-sdk 1.x; `TransactionOutcome::Rollback` on Err).
 4. Runtime API: `LaunchpadApi::{quote_buy, quote_sell, launch_state}`.
