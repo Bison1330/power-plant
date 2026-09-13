@@ -256,7 +256,10 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
     spec_name: create_runtime_str!("vitreus-power-plant"),
     impl_name: create_runtime_str!("vitreus-power-plant"),
     authoring_version: 1,
-    spec_version: 213,
+    // 214 is taken by upstream PR #99 (VTRS as EVM native currency); this
+    // runtime adds pallet-launchpad on top of 213 and skips to 215 so the two
+    // never share a number.
+    spec_version: 215,
     impl_version: 0,
     apis: RUNTIME_API_VERSIONS,
     transaction_version: 4,
@@ -1169,6 +1172,77 @@ impl pallet_vitreus_dex::Config for Runtime {
     type DefaultSolverBondAmount = DefaultSolverBondAmount;
 }
 
+// ---- pallet-launchpad (testnet-runtime only) --------------------------------
+//
+// The launchpad creates launch tokens through `fungibles::Create`, the force
+// path of pallet_assets that does not consult `CreateOrigin`. Under
+// testnet-runtime `CreateOrigin` is `EnsureSigned`, so nothing is circumvented;
+// under mainnet-runtime it is `EnsureNever` — the Foundation's decision that
+// there is no permissionless asset creation — and the launchpad is not wired.
+
+#[cfg(feature = "testnet-runtime")]
+parameter_types! {
+    pub const LaunchpadPalletId: PalletId = PalletId(*b"vtrs/lpd");
+    /// S: 1B tokens at 18 decimals.
+    pub const LaunchpadTotalSupply: Balance = 1_000_000_000 * UNITS;
+    /// 80 % sold on the curve; the remaining 20 % seeds the pool.
+    pub const LaunchpadSellable: Balance = 800_000_000 * UNITS;
+    /// VT_FLOOR: virtual token reserve left at sell-out (m = 16 price multiple).
+    pub const LaunchpadVirtualTokenFloor: Balance = 266_666_667 * UNITS;
+    /// Same range LaunchpadReservedAssets guards on the DEX side: [2^64, 2^65).
+    pub LaunchpadAssetBase: AssetId = AssetId::try_from(LAUNCHPAD_ASSET_ID_START)
+        .expect("launchpad asset-id base must fit AssetId");
+    pub const LaunchpadMinGraduationTarget: Balance = 3 * UNITS;
+    pub const LaunchpadMaxGraduationTarget: Balance = 3_000_000_000 * UNITS;
+    /// 2·ED + metadata deposits the escrow pays (base + per-byte × name + symbol).
+    pub const LaunchpadMinCreationFee: Balance = 2 * EXISTENTIAL_DEPOSIT + 100 + 2 * 50 * 2;
+    pub const LaunchpadRescueDelay: BlockNumber = 7 * DAYS;
+    /// Placeholder governance terms; `set_params` changes them for future launches.
+    pub LaunchpadDefaultParams: pallet_launchpad::LaunchParams<Balance> = pallet_launchpad::LaunchParams {
+        graduation_target: 3_000 * UNITS,
+        curve_fee_bps: 100,
+        protocol_share_bps: 5_000,
+        pool_fee_tier: 3,
+        creation_fee: 1 * UNITS,
+    };
+}
+
+#[cfg(feature = "testnet-runtime")]
+pub struct LaunchpadAssetKind;
+#[cfg(feature = "testnet-runtime")]
+impl sp_runtime::traits::Convert<AssetId, NativeOrAssetId> for LaunchpadAssetKind {
+    fn convert(id: AssetId) -> NativeOrAssetId {
+        NativeOrAssetId::WithId(id)
+    }
+}
+
+#[cfg(feature = "testnet-runtime")]
+impl pallet_launchpad::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    type LaunchManageOrigin = EnsureRoot<AccountId>;
+    type AssetId = AssetId;
+    type Currency = Balances;
+    type LaunchAssets = Assets;
+    type NativeAssetKind = NativeAsset;
+    type IntoAssetKind = LaunchpadAssetKind;
+    type Dex = VitreusDex;
+    type Treasury = xcm_config::TreasuryAccount;
+    type PalletId = LaunchpadPalletId;
+    type TotalSupply = LaunchpadTotalSupply;
+    type Sellable = LaunchpadSellable;
+    type VirtualTokenFloor = LaunchpadVirtualTokenFloor;
+    type LaunchAssetBase = LaunchpadAssetBase;
+    type MinGraduationTarget = LaunchpadMinGraduationTarget;
+    type MaxGraduationTarget = LaunchpadMaxGraduationTarget;
+    type MaxCurveFeeBps = frame_support::traits::ConstU16<500>;
+    type MinProtocolShareBps = frame_support::traits::ConstU16<5_000>;
+    type MinCreationFee = LaunchpadMinCreationFee;
+    type RescueDelay = LaunchpadRescueDelay;
+    type StringLimit = AssetsStringLimit;
+    type DefaultLaunchParams = LaunchpadDefaultParams;
+    type BuyHook = ();
+}
+
 parameter_types! {
     pub const ExpectedSessionDuration: u32 = EPOCH_DURATION_IN_BLOCKS * SECS_PER_BLOCK as u32;
     pub const AnnualPercentageRate: u32 = 100; // 10%
@@ -2031,6 +2105,9 @@ construct_runtime!(
         Elections: pallet_elections_phragmen = 54,
         Multisig: pallet_multisig = 55,
         DemocracyExtension: pallet_democracy_extension = 56,
+        // testnet only: see the pallet_launchpad::Config block.
+        #[cfg(feature = "testnet-runtime")]
+        Launchpad: pallet_launchpad = 57,
         TechnicalCommitteeTreasury: pallet_treasury::<Instance1> = 58,
 
         // Parachains pallets
