@@ -41,7 +41,7 @@ use frame_support::{
         },
         EnsureOrigin, Get,
     },
-    PalletId,
+    BoundedVec, CloneNoBound, EqNoBound, PalletId, PartialEqNoBound, RuntimeDebugNoBound,
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_vitreus_dex::{PoolManager, ReservedPoolSeeder, MINIMUM_LIQUIDITY};
@@ -116,6 +116,39 @@ pub struct Launch<T: Config> {
     pub curve: CurveParams<BalanceOf<T>>,
     pub params_hash: T::Hash,
 }
+
+/// Off-curve presentation data for a launch (§1.2). Cold: read on a page
+/// view, never on a trade, which is why it is stored apart from [`Launch`].
+/// Every field is a bounded byte string the chain stores and returns
+/// verbatim — nothing here is validated or verified on chain (see §2.9): the
+/// image is expected to be a URI the frontend resolves, not image bytes.
+#[derive(CloneNoBound, Encode, Decode, EqNoBound, PartialEqNoBound, RuntimeDebugNoBound, TypeInfo, MaxEncodedLen)]
+#[scale_info(skip_type_params(UriLimit, DescriptionLimit))]
+pub struct LaunchMetadata<UriLimit: Get<u32>, DescriptionLimit: Get<u32>> {
+    /// Image URI (https://…, ipfs://…, data:…). Resolved and sandboxed by the frontend.
+    pub image: BoundedVec<u8, UriLimit>,
+    /// Free text.
+    pub description: BoundedVec<u8, DescriptionLimit>,
+    pub website: BoundedVec<u8, UriLimit>,
+    pub twitter: BoundedVec<u8, UriLimit>,
+    pub telegram: BoundedVec<u8, UriLimit>,
+}
+
+impl<UriLimit: Get<u32>, DescriptionLimit: Get<u32>> LaunchMetadata<UriLimit, DescriptionLimit> {
+    /// `(description length, longest URI length)` — the two dimensions the
+    /// weight of writing this record varies with.
+    pub fn dims(&self) -> (u32, u32) {
+        let u = [&self.image, &self.website, &self.twitter, &self.telegram]
+            .into_iter()
+            .map(|b| b.len())
+            .max()
+            .unwrap_or(0);
+        (self.description.len() as u32, u as u32)
+    }
+}
+
+/// [`LaunchMetadata`] with this pallet's bounds.
+pub type LaunchMetadataOf<T> = LaunchMetadata<<T as Config>::UriLimit, <T as Config>::DescriptionLimit>;
 
 /// Hot per-launch curve state (§1.3).
 #[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
@@ -238,6 +271,12 @@ pub mod pallet {
         /// Name / symbol length cap (≤ `pallet_assets` StringLimit).
         #[pallet::constant]
         type StringLimit: Get<u32>;
+        /// Byte cap on each URI field of [`LaunchMetadata`] (image, website, twitter, telegram).
+        #[pallet::constant]
+        type UriLimit: Get<u32>;
+        /// Byte cap on [`LaunchMetadata::description`].
+        #[pallet::constant]
+        type DescriptionLimit: Get<u32>;
         /// Initial `Params`.
         #[pallet::constant]
         type DefaultLaunchParams: Get<LaunchParams<BalanceOf<Self>>>;
@@ -277,6 +316,11 @@ pub mod pallet {
     #[pallet::storage]
     pub type AssetToLaunch<T: Config> = StorageMap<_, Blake2_128Concat, AssetIdOf<T>, LaunchId>;
 
+    /// Presentation metadata per launch (§1.2). Absent when the creator gave
+    /// none. Replaced whole by `set_launch_metadata`; never read on a trade.
+    #[pallet::storage]
+    pub type Metadata<T: Config> = StorageMap<_, Blake2_128Concat, LaunchId, LaunchMetadataOf<T>>;
+
     // ---- events / errors (§7) --------------------------------------------
 
     #[pallet::event]
@@ -292,6 +336,8 @@ pub mod pallet {
         Graduated { launch_id: LaunchId, quote_seeded: BalanceOf<T>, tokens_seeded: BalanceOf<T>, shares: BalanceOf<T> },
         CreatorFeesClaimed { launch_id: LaunchId, recipient: T::AccountId, amount: BalanceOf<T> },
         CreatorFeeRecipientChanged { launch_id: LaunchId, old: T::AccountId, new: T::AccountId },
+        /// Metadata was written for a launch (at creation or by `set_launch_metadata`).
+        LaunchMetadataSet { launch_id: LaunchId },
         ParamsUpdated { params: LaunchParams<BalanceOf<T>> },
         CreationPausedSet { paused: bool },
         ForceSeeded { launch_id: LaunchId, deviation_bps: u16, shares: BalanceOf<T> },
@@ -335,7 +381,8 @@ pub mod pallet {
         /// §2.1
         #[pallet::call_index(0)]
         #[pallet::weight({
-            let w = <T as Config>::WeightInfo::create_launch(name.len() as u32, symbol.len() as u32);
+            let (d, u) = metadata.as_ref().map(|m| m.dims()).unwrap_or((0, 0));
+            let w = <T as Config>::WeightInfo::create_launch(name.len() as u32, symbol.len() as u32, d, u);
             if initial_buy.is_zero() { w } else { w.saturating_add(<T as Config>::WeightInfo::buy_crossing()) }
         })]
         pub fn create_launch(
@@ -346,6 +393,7 @@ pub mod pallet {
             initial_buy: BalanceOf<T>,
             min_tokens_out: BalanceOf<T>,
             expected_params_hash: Option<T::Hash>,
+            metadata: Option<LaunchMetadataOf<T>>,
         ) -> DispatchResultWithPostInfo {
             let creator = ensure_signed(origin)?;
             ensure!(!CreationPaused::<T>::get(), Error::<T>::CreationPaused);
@@ -420,12 +468,19 @@ pub mod pallet {
             NextLaunchId::<T>::put(id.checked_add(1).ok_or(Error::<T>::ArithmeticOverflow)?);
             Self::deposit_event(Event::LaunchCreated { id, asset_id, creator: creator.clone(), params_hash });
 
+            // 7. presentation metadata, stored apart from the launch record (§2.9).
+            let (d, u) = metadata.as_ref().map(|m| m.dims()).unwrap_or((0, 0));
+            if let Some(m) = metadata {
+                Metadata::<T>::insert(id, m);
+                Self::deposit_event(Event::LaunchMetadataSet { launch_id: id });
+            }
+
             // 8. optional atomic first buy. Charged as a crossing buy up front;
             // refunded to a plain buy when the curve was not exhausted.
             if !initial_buy.is_zero() {
                 let crossed = Self::do_buy(&creator, id, initial_buy, min_tokens_out, true)?;
                 if !crossed {
-                    let w = <T as Config>::WeightInfo::create_launch(name.len() as u32, symbol.len() as u32)
+                    let w = <T as Config>::WeightInfo::create_launch(name.len() as u32, symbol.len() as u32, d, u)
                         .saturating_add(<T as Config>::WeightInfo::buy());
                     return Ok(Some(w).into());
                 }
@@ -507,6 +562,27 @@ pub mod pallet {
                 Self::deposit_event(Event::CreatorFeeRecipientChanged { launch_id, old, new: new.clone() });
                 Ok(())
             })
+        }
+
+        /// §2.9 — replace a launch's presentation metadata. Same authority as
+        /// `set_creator_fee_recipient`: only the current fee recipient, no
+        /// governance override. Allowed in every phase. Nothing is validated.
+        #[pallet::call_index(9)]
+        #[pallet::weight({
+            let (d, u) = metadata.dims();
+            <T as Config>::WeightInfo::set_launch_metadata(d, u)
+        })]
+        pub fn set_launch_metadata(
+            origin: OriginFor<T>,
+            launch_id: LaunchId,
+            metadata: LaunchMetadataOf<T>,
+        ) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+            let launch = Launches::<T>::get(launch_id).ok_or(Error::<T>::LaunchNotFound)?;
+            ensure!(who == launch.creator_fee_recipient, Error::<T>::NotFeeRecipient);
+            Metadata::<T>::insert(launch_id, metadata);
+            Self::deposit_event(Event::LaunchMetadataSet { launch_id });
+            Ok(())
         }
 
         /// §2.8 — affects launches created afterwards only (FM-10).

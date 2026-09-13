@@ -60,7 +60,7 @@ fn origin(who: impl Borrow<Acc>) -> RuntimeOrigin {
 /// Create a launch with default terms and no initial buy; returns its id.
 fn create(creator: impl Borrow<Acc>) -> LaunchId {
     let id = NextLaunchId::<Test>::get();
-    assert_ok!(Launchpad::create_launch(origin(creator), bv(b"Meme"), bv(b"MEME"), None, 0, 0, None));
+    assert_ok!(Launchpad::create_launch(origin(creator), bv(b"Meme"), bv(b"MEME"), None, 0, 0, None, None));
     id
 }
 fn buy(who: impl Borrow<Acc>, id: LaunchId, q: u128) {
@@ -160,7 +160,7 @@ fn lifecycle_happy_path() {
     new_test_ext().execute_with(|| {
         let treasury_before = vtrs(TREASURY);
         let id = NextLaunchId::<Test>::get();
-        assert_ok!(Launchpad::create_launch(origin(ALICE), bv(b"Meme"), bv(b"MEME"), None, 5 * UNIT, 0, None));
+        assert_ok!(Launchpad::create_launch(origin(ALICE), bv(b"Meme"), bv(b"MEME"), None, 5 * UNIT, 0, None, None));
         let l = launch(id);
         assert_eq!(l.asset_id, asset_of(id));
         assert_eq!(Assets::total_supply(asset_of(id)), 1_000_000_000 * UNIT);
@@ -221,7 +221,7 @@ fn lifecycle_happy_path() {
 fn lifecycle_initial_buy_completes_curve() {
     new_test_ext().execute_with(|| {
         let id = NextLaunchId::<Test>::get();
-        assert_ok!(Launchpad::create_launch(origin(ALICE), bv(b"Meme"), bv(b"MEME"), None, 100_000 * UNIT, 0, None));
+        assert_ok!(Launchpad::create_launch(origin(ALICE), bv(b"Meme"), bv(b"MEME"), None, 100_000 * UNIT, 0, None, None));
         assert_eq!(state(id).phase, Phase::Graduated);
         assert_eq!(tok(id, ALICE), SELLABLE);
         assert!(VitreusDex::pool_exists(native(), kind(id)));
@@ -374,7 +374,7 @@ fn fm03_no_path_moves_escrow_funds_except_curve_and_seed() {
         for forbidden in ["force_withdraw", "force_refund", "force_cancel", "force_set_phase", "force_mint", "withdraw", "refund"] {
             assert!(!names.iter().any(|n| n.contains(forbidden)), "found {forbidden}");
         }
-        assert_eq!(names.len(), 9, "a new dispatchable was added; extend this test's call list");
+        assert_eq!(names.len(), 10, "a new dispatchable was added; extend this test's call list");
 
         let trading = create(ALICE);
         buy(BOB, trading, 100 * UNIT);
@@ -389,7 +389,7 @@ fn fm03_no_path_moves_escrow_funds_except_curve_and_seed() {
             // neither creator nor recipient, with arguments that make the
             // fund-moving calls no-ops or errors.
             let calls: Vec<RuntimeCall> = vec![
-                RuntimeCall::Launchpad(crate::Call::create_launch { name: bv(b"X"), symbol: bv(b"X"), creator_fee_recipient: None, initial_buy: 0, min_tokens_out: 0, expected_params_hash: None }),
+                RuntimeCall::Launchpad(crate::Call::create_launch { name: bv(b"X"), symbol: bv(b"X"), creator_fee_recipient: None, initial_buy: 0, min_tokens_out: 0, expected_params_hash: None, metadata: None }),
                 RuntimeCall::Launchpad(crate::Call::buy { launch_id: id, quote_in: 0, min_tokens_out: 0 }),
                 RuntimeCall::Launchpad(crate::Call::sell { launch_id: id, tokens_in: 0, min_quote_out: 0 }),
                 RuntimeCall::Launchpad(crate::Call::graduate { launch_id: id }),
@@ -398,6 +398,7 @@ fn fm03_no_path_moves_escrow_funds_except_curve_and_seed() {
                 RuntimeCall::Launchpad(crate::Call::set_params { new: Params::<Test>::get() }),
                 RuntimeCall::Launchpad(crate::Call::set_creation_paused { paused: false }),
                 RuntimeCall::Launchpad(crate::Call::force_seed_into_existing_pool { launch_id: id, max_price_deviation_bps: 10_000 }),
+                RuntimeCall::Launchpad(crate::Call::set_launch_metadata { launch_id: id, metadata: meta(b"x", b"y") }),
             ];
             assert_eq!(calls.len(), names.len());
             for call in calls {
@@ -483,7 +484,7 @@ fn fm05_all_entry_paths_hit_the_hook() {
         assert_ok!(Multisig::as_multi_threshold_1(origin(ALICE), vec![BOB], Box::new(buy_call(UNIT))));
         // initial buy inside create_launch
         let id2 = NextLaunchId::<Test>::get();
-        assert_ok!(Launchpad::create_launch(origin(ALICE), bv(b"B"), bv(b"B"), None, UNIT, 0, None));
+        assert_ok!(Launchpad::create_launch(origin(ALICE), bv(b"B"), bv(b"B"), None, UNIT, 0, None, None));
 
         let calls = HOOK_CALLS.with(|c| c.borrow().clone());
         let new = &calls[calls_before..];
@@ -524,7 +525,7 @@ fn fm07_hook_receives_block_numbers_not_time() {
         System::set_block_number(5);
         // creator's atomic buy is exempt (is_creator == true)
         let id = NextLaunchId::<Test>::get();
-        assert_ok!(Launchpad::create_launch(origin(ALICE), bv(b"M"), bv(b"M"), None, UNIT, 0, None));
+        assert_ok!(Launchpad::create_launch(origin(ALICE), bv(b"M"), bv(b"M"), None, UNIT, 0, None, None));
         assert_eq!(launch(id).created_at, 5);
         // a non-creator in the creation block is rejected
         assert_noop!(Launchpad::buy(origin(BOB), id, UNIT, 0), DispatchError::Other("hook: not in creation block"));
@@ -863,10 +864,10 @@ fn fm10_params_change_does_not_touch_live_launch() {
         assert_eq!(launch(m).params_hash, hash_after);
 
         assert_noop!(
-            Launchpad::create_launch(origin(ALICE), bv(b"N"), bv(b"N"), None, 0, 0, Some(hash_before)),
+            Launchpad::create_launch(origin(ALICE), bv(b"N"), bv(b"N"), None, 0, 0, Some(hash_before), None),
             Error::<Test>::ParamsMismatch
         );
-        assert_ok!(Launchpad::create_launch(origin(ALICE), bv(b"N"), bv(b"N"), None, 0, 0, Some(hash_after)));
+        assert_ok!(Launchpad::create_launch(origin(ALICE), bv(b"N"), bv(b"N"), None, 0, 0, Some(hash_after), None));
     });
 }
 
@@ -895,7 +896,7 @@ fn fm10_params_bounds() {
         assert_noop!(Launchpad::set_creation_paused(origin(ALICE), true), BadOrigin);
         assert_ok!(Launchpad::set_creation_paused(RuntimeOrigin::root(), true));
         assert_noop!(
-            Launchpad::create_launch(origin(ALICE), bv(b"N"), bv(b"N"), None, 0, 0, None),
+            Launchpad::create_launch(origin(ALICE), bv(b"N"), bv(b"N"), None, 0, 0, None, None),
             Error::<Test>::CreationPaused
         );
     });
@@ -994,7 +995,7 @@ fn fm11_create_preflight_rejects_unseedable() {
         assert_ok!(Launchpad::ensure_seedable(1_001, 1_001));
         assert_ok!(Launchpad::ensure_seedable(MinGraduationTarget::get(), RESERVED));
         // and with in-bounds params create_launch can never trip it
-        assert_ok!(Launchpad::create_launch(origin(ALICE), bv(b"N"), bv(b"N"), None, 0, 0, None));
+        assert_ok!(Launchpad::create_launch(origin(ALICE), bv(b"N"), bv(b"N"), None, 0, 0, None, None));
     });
 }
 
@@ -1065,7 +1066,7 @@ fn fm14_asset_id_squatting() {
         let next = NextLaunchId::<Test>::get();
         assert_ok!(Assets::create(origin(BOB), asset_of(next).into(), BOB, 1));
         assert_noop!(
-            Launchpad::create_launch(origin(ALICE), bv(b"N"), bv(b"N"), None, 0, 0, None),
+            Launchpad::create_launch(origin(ALICE), bv(b"N"), bv(b"N"), None, 0, 0, None, None),
             Error::<Test>::AssetIdTaken
         );
         assert_eq!(NextLaunchId::<Test>::get(), next);
@@ -1076,9 +1077,9 @@ fn fm14_asset_id_squatting() {
     new_test_ext().execute_with(|| {
         let next = NextLaunchId::<Test>::get();
         assert_ok!(Assets::create(origin(BOB), asset_of(next + 1).into(), BOB, 1));
-        assert_ok!(Launchpad::create_launch(origin(ALICE), bv(b"N"), bv(b"N"), None, 0, 0, None));
+        assert_ok!(Launchpad::create_launch(origin(ALICE), bv(b"N"), bv(b"N"), None, 0, 0, None, None));
         assert_noop!(
-            Launchpad::create_launch(origin(ALICE), bv(b"N"), bv(b"N"), None, 0, 0, None),
+            Launchpad::create_launch(origin(ALICE), bv(b"N"), bv(b"N"), None, 0, 0, None, None),
             Error::<Test>::AssetIdTaken
         );
     });
@@ -1141,10 +1142,10 @@ fn fm15_escrow_survives_full_sellback_and_claims() {
 #[test]
 fn fm16_name_symbol_not_enforced_on_chain() {
     new_test_ext().execute_with(|| {
-        assert_ok!(Launchpad::create_launch(origin(ALICE), bv(b"Same"), bv(b"SAME"), None, 0, 0, None));
-        assert_ok!(Launchpad::create_launch(origin(BOB), bv(b"Same"), bv(b"SAME"), None, 0, 0, None));
+        assert_ok!(Launchpad::create_launch(origin(ALICE), bv(b"Same"), bv(b"SAME"), None, 0, 0, None, None));
+        assert_ok!(Launchpad::create_launch(origin(BOB), bv(b"Same"), bv(b"SAME"), None, 0, 0, None, None));
         assert_noop!(
-            Launchpad::create_launch(origin(BOB), bv(b""), bv(b"X"), None, 0, 0, None),
+            Launchpad::create_launch(origin(BOB), bv(b""), bv(b"X"), None, 0, 0, None, None),
             Error::<Test>::InvalidMetadata
         );
     });
@@ -1200,19 +1201,19 @@ fn weights_crossing_buy_refunds_when_not_crossing() {
         // `create_launch` with a non-crossing initial buy: charged create + crossing, refunded to create + buy.
         let call: RuntimeCall = crate::Call::<Test>::create_launch {
             name: bv(b"Meme"), symbol: bv(b"MEME"), creator_fee_recipient: None,
-            initial_buy: 2_000 * UNIT, min_tokens_out: 0, expected_params_hash: None,
+            initial_buy: 2_000 * UNIT, min_tokens_out: 0, expected_params_hash: None, metadata: None,
         }.into();
-        assert_eq!(call.get_dispatch_info().weight, <() as W>::create_launch(4, 4).saturating_add(<() as W>::buy_crossing()));
-        let post = Launchpad::create_launch(origin(CHARLIE), bv(b"Meme"), bv(b"MEME"), None, 2_000 * UNIT, 0, None).unwrap();
-        assert_eq!(post.actual_weight, Some(<() as W>::create_launch(4, 4).saturating_add(<() as W>::buy())));
+        assert_eq!(call.get_dispatch_info().weight, <() as W>::create_launch(4, 4, 0, 0).saturating_add(<() as W>::buy_crossing()));
+        let post = Launchpad::create_launch(origin(CHARLIE), bv(b"Meme"), bv(b"MEME"), None, 2_000 * UNIT, 0, None, None).unwrap();
+        assert_eq!(post.actual_weight, Some(<() as W>::create_launch(4, 4, 0, 0).saturating_add(<() as W>::buy())));
 
         // Without an initial buy nothing extra is charged and nothing is refunded.
         let call: RuntimeCall = crate::Call::<Test>::create_launch {
             name: bv(b"Meme"), symbol: bv(b"MEME"), creator_fee_recipient: None,
-            initial_buy: 0, min_tokens_out: 0, expected_params_hash: None,
+            initial_buy: 0, min_tokens_out: 0, expected_params_hash: None, metadata: None,
         }.into();
-        assert_eq!(call.get_dispatch_info().weight, <() as W>::create_launch(4, 4));
-        let post = Launchpad::create_launch(origin(CHARLIE), bv(b"Meme"), bv(b"MEME"), None, 0, 0, None).unwrap();
+        assert_eq!(call.get_dispatch_info().weight, <() as W>::create_launch(4, 4, 0, 0));
+        let post = Launchpad::create_launch(origin(CHARLIE), bv(b"Meme"), bv(b"MEME"), None, 0, 0, None, None).unwrap();
         assert_eq!(post.actual_weight, None);
     });
 }
@@ -1290,4 +1291,100 @@ fn d4_creator_fee_recipient_lookup_is_none_for_unknown_assets() {
         assert_eq!(Launchpad::creator_fee_recipient_for(asset_of(id)), Some(BOB));
         assert_eq!(Launchpad::creator_fee_recipient_for(asset_of(id) + 1), None);
     });
+}
+
+// ---- §2.9 launch metadata ----------------------------------------------
+//
+// Presentation data lives in `Metadata`, apart from the launch record, and
+// is mutable by the current creator fee recipient. Nothing about it is
+// validated on chain (fm16 applies to every field, not just name/symbol).
+
+fn meta(image: &[u8], description: &[u8]) -> crate::LaunchMetadataOf<Test> {
+    let uri = |b: &[u8]| frame_support::BoundedVec::try_from(b.to_vec()).unwrap();
+    crate::LaunchMetadata {
+        image: uri(image),
+        description: frame_support::BoundedVec::try_from(description.to_vec()).unwrap(),
+        website: uri(b"https://example.com"),
+        twitter: uri(b"@example"),
+        telegram: uri(b"t.me/example"),
+    }
+}
+
+#[test]
+fn metadata_is_optional_and_stored_apart_from_the_launch_record() {
+    new_test_ext().execute_with(|| {
+        // None: no record, no event.
+        let a = create(ALICE);
+        assert!(crate::Metadata::<Test>::get(a).is_none());
+        assert!(!has_event(|e| matches!(e, Event::LaunchMetadataSet { .. })));
+
+        // Some: stored verbatim, the launch record itself is unchanged in shape.
+        let b = NextLaunchId::<Test>::get();
+        let m = meta(b"ipfs://Qm/logo.png", b"A meme.");
+        assert_ok!(Launchpad::create_launch(origin(ALICE), bv(b"Meme"), bv(b"MEME"), None, 0, 0, None, Some(m.clone())));
+        assert_eq!(crate::Metadata::<Test>::get(b), Some(m));
+        assert!(has_event(|e| matches!(e, Event::LaunchMetadataSet { launch_id } if *launch_id == b)));
+        assert_eq!(launch(b).creator, ALICE);
+
+        // Nothing is validated: bytes that are not a URI or a handle are accepted as given.
+        let c = NextLaunchId::<Test>::get();
+        let junk = meta(b"not a uri \x00\xff", b"<script>alert(1)</script>");
+        assert_ok!(Launchpad::create_launch(origin(BOB), bv(b"J"), bv(b"J"), None, 0, 0, None, Some(junk.clone())));
+        assert_eq!(crate::Metadata::<Test>::get(c), Some(junk));
+    });
+}
+
+#[test]
+fn set_launch_metadata_follows_the_creator_fee_recipient() {
+    new_test_ext().execute_with(|| {
+        let id = create(ALICE);
+        let m1 = meta(b"https://a/1.png", b"one");
+        let m2 = meta(b"https://a/2.png", b"two");
+
+        assert_noop!(Launchpad::set_launch_metadata(origin(BOB), id, m1.clone()), Error::<Test>::NotFeeRecipient);
+        assert_noop!(Launchpad::set_launch_metadata(RuntimeOrigin::root(), id, m1.clone()), BadOrigin);
+        assert_noop!(Launchpad::set_launch_metadata(origin(ALICE), 999, m1.clone()), Error::<Test>::LaunchNotFound);
+
+        // The creator sets it when none was given at creation, and replaces it whole.
+        assert_ok!(Launchpad::set_launch_metadata(origin(ALICE), id, m1.clone()));
+        assert_eq!(crate::Metadata::<Test>::get(id), Some(m1.clone()));
+        assert_ok!(Launchpad::set_launch_metadata(origin(ALICE), id, m2.clone()));
+        assert_eq!(crate::Metadata::<Test>::get(id), Some(m2.clone()));
+
+        // Handing the fee stream to CHARLIE hands metadata authority with it.
+        assert_ok!(Launchpad::set_creator_fee_recipient(origin(ALICE), id, CHARLIE));
+        assert_noop!(Launchpad::set_launch_metadata(origin(ALICE), id, m1.clone()), Error::<Test>::NotFeeRecipient);
+        assert_ok!(Launchpad::set_launch_metadata(origin(CHARLIE), id, m1.clone()));
+        assert_eq!(crate::Metadata::<Test>::get(id), Some(m1.clone()));
+
+        // Still allowed after graduation.
+        cross(BOB, id);
+        assert_eq!(state(id).phase, Phase::Graduated);
+        assert_ok!(Launchpad::set_launch_metadata(origin(CHARLIE), id, m2.clone()));
+        assert_eq!(crate::Metadata::<Test>::get(id), Some(m2));
+    });
+}
+
+#[test]
+fn metadata_fields_are_bounded() {
+    use frame_support::{traits::Get, BoundedVec};
+    type UriLimit = <Test as crate::Config>::UriLimit;
+    type DescriptionLimit = <Test as crate::Config>::DescriptionLimit;
+    type Uri = BoundedVec<u8, UriLimit>;
+    type Desc = BoundedVec<u8, DescriptionLimit>;
+    let u = <UriLimit as Get<u32>>::get() as usize;
+    let d = <DescriptionLimit as Get<u32>>::get() as usize;
+    assert!(Uri::try_from(vec![b'x'; u]).is_ok());
+    assert!(Uri::try_from(vec![b'x'; u + 1]).is_err());
+    assert!(Desc::try_from(vec![b'x'; d]).is_ok());
+    assert!(Desc::try_from(vec![b'x'; d + 1]).is_err());
+    // The weight dimensions see the longest URI and the description length.
+    let m = crate::LaunchMetadata::<UriLimit, DescriptionLimit> {
+        image: Uri::try_from(vec![b'i'; 3]).unwrap(),
+        description: Desc::try_from(vec![b'd'; 7]).unwrap(),
+        website: Uri::try_from(vec![b'w'; 5]).unwrap(),
+        twitter: Uri::try_from(Vec::<u8>::new()).unwrap(),
+        telegram: Uri::try_from(vec![b't'; 4]).unwrap(),
+    };
+    assert_eq!(m.dims(), (7, 5));
 }

@@ -16,11 +16,15 @@
 //!
 //! How the functions map onto the calls (§6.3):
 //!
-//! * `create_launch(n, s)` — creation without an initial buy; `n` and `s` are
-//!   the name and symbol lengths (metadata write size and deposit). A call
-//!   with `initial_buy > 0` is charged `create_launch(n, s) + buy_crossing()`
-//!   up front and refunded to `create_launch(n, s) + buy()` when the buy did
-//!   not cross.
+//! * `create_launch(n, s, d, u)` — creation without an initial buy; `n` and `s`
+//!   are the name and symbol lengths (asset metadata write size and deposit),
+//!   `d` the description length and `u` the longest URI length of the optional
+//!   launch metadata (a second storage write; both 0 when none is given). A
+//!   call with `initial_buy > 0` is charged `create_launch(..) + buy_crossing()`
+//!   up front and refunded to `create_launch(..) + buy()` when the buy did not
+//!   cross.
+//! * `set_launch_metadata(d, u)` — replaces the metadata record; same
+//!   components.
 //! * `buy()` — a buy that leaves tokens on the curve.
 //! * `buy_crossing()` — the max-weight path: partial fill, then pool creation,
 //!   liquidity seeding with a pre-seed sweep of both assets, and the permanent
@@ -41,7 +45,7 @@ use core::marker::PhantomData;
 
 /// Weight functions needed for pallet-launchpad.
 pub trait WeightInfo {
-    fn create_launch(n: u32, s: u32) -> Weight;
+    fn create_launch(n: u32, s: u32, d: u32, u: u32) -> Weight;
     fn buy() -> Weight;
     fn buy_crossing() -> Weight;
     fn sell() -> Weight;
@@ -51,12 +55,13 @@ pub trait WeightInfo {
     fn set_params() -> Weight;
     fn set_creation_paused() -> Weight;
     fn force_seed_into_existing_pool() -> Weight;
+    fn set_launch_metadata(d: u32, u: u32) -> Weight;
 }
 
 /// Weights for pallet-launchpad using the Substrate node and recommended hardware.
 pub struct SubstrateWeight<T>(PhantomData<T>);
 impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
-    fn create_launch(_n: u32, _s: u32) -> Weight {
+    fn create_launch(_n: u32, _s: u32, _d: u32, _u: u32) -> Weight {
         Weight::from_parts(600_000_000, 40_000)
     }
     fn buy() -> Weight {
@@ -85,12 +90,15 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
     }
     fn force_seed_into_existing_pool() -> Weight {
         Weight::from_parts(600_000_000, 40_000)
+    }
+    fn set_launch_metadata(_d: u32, _u: u32) -> Weight {
+        Weight::from_parts(100_000_000, 10_000)
     }
 }
 
 // For backwards compatibility and tests.
 impl WeightInfo for () {
-    fn create_launch(_n: u32, _s: u32) -> Weight {
+    fn create_launch(_n: u32, _s: u32, _d: u32, _u: u32) -> Weight {
         Weight::from_parts(600_000_000, 40_000)
     }
     fn buy() -> Weight {
@@ -119,5 +127,8 @@ impl WeightInfo for () {
     }
     fn force_seed_into_existing_pool() -> Weight {
         Weight::from_parts(600_000_000, 40_000)
+    }
+    fn set_launch_metadata(_d: u32, _u: u32) -> Weight {
+        Weight::from_parts(100_000_000, 10_000)
     }
 }

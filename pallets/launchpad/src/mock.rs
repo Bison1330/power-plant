@@ -295,6 +295,8 @@ impl pallet_launchpad::Config for Test {
     type MinCreationFee = MinCreationFee;
     type RescueDelay = ConstU64<100_800>;
     type StringLimit = ConstU32<50>;
+    type UriLimit = ConstU32<256>;
+    type DescriptionLimit = ConstU32<1024>;
     type DefaultLaunchParams = DefaultLaunchParams;
     type BuyHook = RecordingHook;
     type WeightInfo = ();

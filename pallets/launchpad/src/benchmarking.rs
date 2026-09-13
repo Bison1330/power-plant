@@ -75,9 +75,23 @@ fn create<T: Config>(creator: &T::AccountId) -> LaunchId {
         Zero::zero(),
         Zero::zero(),
         None,
+        None,
     )
     .expect("create launch");
     id
+}
+
+/// Metadata with a `d`-byte description and four `u`-byte URIs — the two
+/// dimensions its storage write varies with.
+fn metadata<T: Config>(d: u32, u: u32) -> LaunchMetadataOf<T> {
+    let uri = |byte: u8| BoundedVec::try_from(sp_std::vec![byte; u as usize]).expect("u ≤ UriLimit");
+    LaunchMetadata {
+        image: uri(b'i'),
+        description: BoundedVec::try_from(sp_std::vec![b'd'; d as usize]).expect("d ≤ DescriptionLimit"),
+        website: uri(b'w'),
+        twitter: uri(b'x'),
+        telegram: uri(b't'),
+    }
 }
 
 fn asset_kind<T: Config>(id: LaunchId) -> AssetKindOf<T> {
@@ -128,7 +142,12 @@ mod benchmarks {
     use super::*;
 
     #[benchmark]
-    fn create_launch(n: Linear<1, { T::StringLimit::get() }>, s: Linear<1, { T::StringLimit::get() }>) {
+    fn create_launch(
+        n: Linear<1, { T::StringLimit::get() }>,
+        s: Linear<1, { T::StringLimit::get() }>,
+        d: Linear<0, { T::DescriptionLimit::get() }>,
+        u: Linear<0, { T::UriLimit::get() }>,
+    ) {
         let caller: T::AccountId = whitelisted_caller();
         fund::<T>(&caller, rich::<T>());
         let id = NextLaunchId::<T>::get();
@@ -142,10 +161,12 @@ mod benchmarks {
             Zero::zero(),
             Zero::zero(),
             None,
+            Some(metadata::<T>(d, u)),
         );
 
         assert_eq!(Curves::<T>::get(id).expect("curve").phase, Phase::Trading);
         assert_eq!(NextLaunchId::<T>::get(), id + 1);
+        assert_eq!(Metadata::<T>::get(id).expect("metadata").dims(), (d, u));
     }
 
     #[benchmark]
@@ -244,6 +265,20 @@ mod benchmarks {
         assert!(Curves::<T>::get(id).expect("curve").creator_fees_unclaimed.is_zero());
         assert_eq!(T::Currency::balance(&caller), before + owed);
         Ok(())
+    }
+
+    #[benchmark]
+    fn set_launch_metadata(d: Linear<0, { T::DescriptionLimit::get() }>, u: Linear<0, { T::UriLimit::get() }>) {
+        let caller: T::AccountId = whitelisted_caller();
+        fund::<T>(&caller, rich::<T>());
+        let id = create::<T>(&caller);
+        // Replace an existing record (a write over the largest possible one).
+        Metadata::<T>::insert(id, metadata::<T>(T::DescriptionLimit::get(), T::UriLimit::get()));
+
+        #[extrinsic_call]
+        _(RawOrigin::Signed(caller.clone()), id, metadata::<T>(d, u));
+
+        assert_eq!(Metadata::<T>::get(id).expect("metadata").dims(), (d, u));
     }
 
     #[benchmark]

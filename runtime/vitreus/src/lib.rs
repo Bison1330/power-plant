@@ -269,7 +269,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
     // 214 is taken by upstream PR #99 (VTRS as EVM native currency); this
     // runtime adds pallet-launchpad on top of 213 and skips to 215 so the two
     // never share a number.
-    spec_version: 216,
+    spec_version: 217,
     impl_version: 0,
     apis: RUNTIME_API_VERSIONS,
     transaction_version: 4,
@@ -1330,6 +1330,10 @@ parameter_types! {
     /// 2·ED + metadata deposits the escrow pays (base + per-byte × name + symbol).
     pub const LaunchpadMinCreationFee: Balance = 2 * EXISTENTIAL_DEPOSIT + 100 + 2 * 50 * 2;
     pub const LaunchpadRescueDelay: BlockNumber = 7 * DAYS;
+    /// Byte caps on launch presentation metadata (§2.9). Stored verbatim,
+    /// never validated; the caps are the only thing bounding the write.
+    pub const LaunchpadUriLimit: u32 = 256;
+    pub const LaunchpadDescriptionLimit: u32 = 1_024;
     /// Placeholder governance terms; `set_params` changes them for future launches.
     pub LaunchpadDefaultParams: pallet_launchpad::LaunchParams<Balance> = pallet_launchpad::LaunchParams {
         graduation_target: 3_000 * UNITS,
@@ -1372,6 +1376,8 @@ impl pallet_launchpad::Config for Runtime {
     type MinCreationFee = LaunchpadMinCreationFee;
     type RescueDelay = LaunchpadRescueDelay;
     type StringLimit = AssetsStringLimit;
+    type UriLimit = LaunchpadUriLimit;
+    type DescriptionLimit = LaunchpadDescriptionLimit;
     type DefaultLaunchParams = LaunchpadDefaultParams;
     type BuyHook = ();
     type WeightInfo = pallet_launchpad::weights::SubstrateWeight<Runtime>;

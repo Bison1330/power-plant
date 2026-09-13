@@ -108,6 +108,21 @@ pub struct CurveParams<Balance> {
 
 #[pallet::storage]
 pub type AssetToLaunch<T: Config> = StorageMap<_, Blake2_128Concat, AssetIdOf<T>, LaunchId>;   // reverse index
+
+/// Presentation metadata (§2.9). Cold — read on a page view, never on a trade — and mutable,
+/// which is why it is a separate item rather than fields on `Launch`: `Launches[id]` is decoded
+/// on every buy and sell, and five bounded strings would ride along on each. Absent when the
+/// creator gave none.
+#[pallet::storage]
+pub type Metadata<T: Config> = StorageMap<_, Blake2_128Concat, LaunchId, LaunchMetadataOf<T>>;
+
+pub struct LaunchMetadata<UriLimit, DescriptionLimit> {
+    pub image: BoundedVec<u8, UriLimit>,          // a URI (https://, ipfs://, data:), NOT image bytes
+    pub description: BoundedVec<u8, DescriptionLimit>,
+    pub website: BoundedVec<u8, UriLimit>,
+    pub twitter: BoundedVec<u8, UriLimit>,
+    pub telegram: BoundedVec<u8, UriLimit>,
+}
 ```
 
 `params_hash = blake2_256(encode((curve, S, SELLABLE, RESERVED, VT_FLOOR)))`.
@@ -195,6 +210,8 @@ pub trait Config: frame_system::Config + pallet_vitreus_dex::Config<Balance: Fro
     #[pallet::constant] type MinCreationFee: Get<BalanceOf<Self>>;
     #[pallet::constant] type RescueDelay: Get<BlockNumberFor<Self>>;   // 7 days = 100_800 blocks at 6 s
     #[pallet::constant] type StringLimit: Get<u32>;                    // ≤ pallet_assets StringLimit (50)
+    #[pallet::constant] type UriLimit: Get<u32>;                       // cap on each metadata URI field (§2.9); runtime: 256
+    #[pallet::constant] type DescriptionLimit: Get<u32>;               // cap on the metadata description (§2.9); runtime: 1024
     #[pallet::constant] type DefaultLaunchParams: Get<LaunchParams<BalanceOf<Self>>>;
 
     /// Anti-snipe hook, v1 = (). See §2.7.
@@ -223,6 +240,7 @@ pub fn create_launch(
     initial_buy: BalanceOf<T>,           // VTRS, may be 0
     min_tokens_out: BalanceOf<T>,        // slippage for the initial buy; ignored when initial_buy == 0
     expected_params_hash: Option<T::Hash>, // FM-10 pin; None waives
+    metadata: Option<LaunchMetadataOf<T>>, // §2.9; None stores nothing
 ) -> DispatchResult
 ```
 
@@ -354,6 +372,16 @@ pub fn force_seed_into_existing_pool(origin, launch_id, max_price_deviation_bps:
 There is deliberately **no** `force_withdraw`, `force_refund`, `force_cancel`, `force_set_phase` or `force_mint` (FM-03).
 
 ---
+
+### 2.9 `set_launch_metadata`
+
+```rust
+pub fn set_launch_metadata(origin: OriginFor<T>, launch_id: LaunchId, metadata: LaunchMetadataOf<T>) -> DispatchResult
+```
+
+Replaces `Metadata[launch_id]` whole. Origin must be the current `creator_fee_recipient` — the same authority as §2.6, and it travels with that role: after `set_creator_fee_recipient`, the new recipient edits and the old one cannot. No governance override. Allowed in every phase; a graduated token's page is still the creator's to maintain. Emits `LaunchMetadataSet{launch_id}`. Metadata may also be supplied at creation through `create_launch`'s last argument, which writes the same record.
+
+**Nothing in the metadata is enforced or verified on chain.** The pallet stores the bytes it is given, bounded only by `UriLimit` / `DescriptionLimit`, and returns them verbatim. It does not check that `image` is a URI or that it resolves, that `website` is a URL, that `twitter` is a handle, that `description` is UTF-8, or that any field is unique — exactly as name and symbol are not checked (`fm16_name_symbol_not_enforced_on_chain`). The bounds exist to cap storage per launch (DoS), not to validate. At the runtime's 256 / 1024 that is up to ~2 KB of storage per launch with no separate deposit; the lever if metadata spam ever becomes a problem is the **creation fee** — `Params.creation_fee` is governance-settable through `set_params` (§2.8) — not a new storage deposit. Recorded here as the known lever, not a gap. A frontend must treat every field as untrusted user input: escape it, never render it as HTML, resolve `image` inside a fixed-size sandboxed box with a generated fallback, and expect junk. Weight: `set_launch_metadata(d, u)` and the `d`, `u` components of `create_launch(n, s, d, u)` are the description length and the longest URI length.
 
 ## 3. Curve math
 
@@ -701,7 +729,7 @@ Unit tests live in `pallets/launchpad/src/tests.rs` against a mock that includes
 
 ## 7. Events and errors (reference)
 
-Events: `LaunchCreated{id, asset_id, creator, params_hash}`, `Bought{launch_id, who, quote_used, fee, tokens_out}`, `Sold{launch_id, who, tokens_in, fee, quote_out}`, `CurveCompleted{launch_id, raised}`, `GraduationDeferred{launch_id, error}`, `Graduated{launch_id, quote_seeded, tokens_seeded, shares}`, `CreatorFeesClaimed{launch_id, recipient, amount}`, `CreatorFeeRecipientChanged{launch_id, old, new}`, `ParamsUpdated{..}`, `CreationPausedSet{paused}`, `ForceSeeded{launch_id, deviation_bps}`.
+Events: `LaunchCreated{id, asset_id, creator, params_hash}`, `Bought{launch_id, who, quote_used, fee, tokens_out}`, `Sold{launch_id, who, tokens_in, fee, quote_out}`, `CurveCompleted{launch_id, raised}`, `GraduationDeferred{launch_id, error}`, `Graduated{launch_id, quote_seeded, tokens_seeded, shares}`, `CreatorFeesClaimed{launch_id, recipient, amount}`, `CreatorFeeRecipientChanged{launch_id, old, new}`, `LaunchMetadataSet{launch_id}`, `ParamsUpdated{..}`, `CreationPausedSet{paused}`, `ForceSeeded{launch_id, deviation_bps}`.
 
 Errors: see §2 header; plus `ReservedAsset`, `PoolAlreadySeeded` surfaced from the DEX.
 
@@ -712,11 +740,11 @@ Errors: see §2 header; plus `ReservedAsset`, `PoolAlreadySeeded` surfaced from 
 ### 8.1 Implemented — `b07441a` (`pallets/launchpad`), `491892a` (runtime wiring), `f0ad296` (benchmark scaffolding)
 
 - **DEX prerequisites.** D1–D3 and D5 landed in `ce34a05`, `5ea3008`, `c7d3752`; D4 in `d8d0ba0` / `5c80ee3` / `ae8e60c` (spec_version 216, DEX storage version 1).
-- **Storage (§1), extrinsics (§2), curve math (§3), graduation state machine (§4).** All nine calls (`create_launch`, `buy`, `sell`, `graduate`, `claim_creator_fees`, `set_creator_fee_recipient`, `set_params`, `set_creation_paused`, `force_seed_into_existing_pool`) with `LaunchManageOrigin` governance; `OnCurveBuy` hook trait with `()` as the v1 no-op (§2.7).
+- **Storage (§1), extrinsics (§2), curve math (§3), graduation state machine (§4).** All ten calls (`create_launch`, `buy`, `sell`, `graduate`, `claim_creator_fees`, `set_creator_fee_recipient`, `set_params`, `set_creation_paused`, `force_seed_into_existing_pool`, `set_launch_metadata` — the last added with §2.9 in metadata.patch) with `LaunchManageOrigin` governance; `OnCurveBuy` hook trait with `()` as the v1 no-op (§2.7).
 - **Item 2 (metadata deposit), resolved.** `fm15_escrow_survives_full_sellback_and_claims` asserts the escrow's reserved balance equals `MetadataDepositBase + PerByte × (len(name) + len(symbol))` and that `fungibles::Create::create` reserves no `AssetDeposit`, matching §2.1.5's `MinCreationFee` derivation.
 - **Item 3 (nested storage layer), resolved.** `do_buy` runs the deferred seed as `with_storage_layer(|| do_seed(..))` (lib.rs); a seed `Err` rolls back only the seed and leaves the crossing buy committed. Covered by `fm08_crossing_buy_partial_fill_and_deferred_seed` and the `arm_seed_failure` / `disarm_seed_failure` harness.
-- **Test plan §6.1 and §6.2.** 37 tests (47 with `runtime-benchmarks`; 35 / 45 before D4): `fm01`–`fm16` failure modes, `lifecycle_*`, and `inv_try_state_holds_after_random_sequences` (600-step random buy/sell/claim walk over three launches, checking every §5 invariant after each step). The §5 invariants live in the test-side `check_invariants` helper, **not** in a pallet `try_state` (see 8.2).
-- **Weights and benchmarks (§6.3), `f0ad296` — scaffolding only; real weights not yet generated.** `WeightInfo` traits for both pallets replace the hard-coded constants; `weights.rs` carries the old constants as **placeholders** in the frame-weight-template layout so `benchmark pallet --output` overwrites them cleanly. v2 benchmarks exist for all nine launchpad calls and all 20 DEX calls (solver marketplace and the four D4 calls included) and pass in both mocks. `buy_crossing` is the max-weight path as §6.3 requires: no pool yet (creation, not adoption), both assets parked on the pool sub-account so `seed_reserved_pool_for` sweeps twice, then seed and permanent lock; `graduate` uses the same worst case on a `Complete` launch; `force_seed_into_existing_pool` seeds its pre-existing pool through the seeder directly. `create_launch(n, s)` takes name and symbol length components; nothing else in either pallet has a length- or count-dependent cost. Weight wiring for state-dependent cost: `buy` is charged `buy_crossing()` and refunded to `buy()` through `PostDispatchInfo` when the curve is not exhausted; `create_launch` adds `buy_crossing()` when an initial buy is present and refunds likewise; `do_buy` reports whether it crossed. `weights_crossing_buy_refunds_when_not_crossing` (§6.2) is written and passing. Both pallets are in the runtime's `define_benchmarks!` (the launchpad entry under `testnet-runtime` only, matching its wiring) and bind `SubstrateWeight<Runtime>`.
+- **Test plan §6.1 and §6.2.** 40 tests (51 with `runtime-benchmarks`; 37 / 47 before §2.9, 35 / 45 before D4): `fm01`–`fm16` failure modes, `lifecycle_*`, and `inv_try_state_holds_after_random_sequences` (600-step random buy/sell/claim walk over three launches, checking every §5 invariant after each step). The §5 invariants live in the test-side `check_invariants` helper, **not** in a pallet `try_state` (see 8.2).
+- **Weights and benchmarks (§6.3), `f0ad296` — scaffolding only; real weights not yet generated.** `WeightInfo` traits for both pallets replace the hard-coded constants; `weights.rs` carries the old constants as **placeholders** in the frame-weight-template layout so `benchmark pallet --output` overwrites them cleanly. v2 benchmarks exist for all ten launchpad calls and all 20 DEX calls (solver marketplace and the four D4 calls included) and pass in both mocks. `buy_crossing` is the max-weight path as §6.3 requires: no pool yet (creation, not adoption), both assets parked on the pool sub-account so `seed_reserved_pool_for` sweeps twice, then seed and permanent lock; `graduate` uses the same worst case on a `Complete` launch; `force_seed_into_existing_pool` seeds its pre-existing pool through the seeder directly. `create_launch(n, s, d, u)` takes name, symbol, description and longest-URI length components and `set_launch_metadata(d, u)` the last two (§2.9); nothing else in either pallet has a length- or count-dependent cost. Weight wiring for state-dependent cost: `buy` is charged `buy_crossing()` and refunded to `buy()` through `PostDispatchInfo` when the curve is not exhausted; `create_launch` adds `buy_crossing()` when an initial buy is present and refunds likewise; `do_buy` reports whether it crossed. `weights_crossing_buy_refunds_when_not_crossing` (§6.2) is written and passing. Both pallets are in the runtime's `define_benchmarks!` (the launchpad entry under `testnet-runtime` only, matching its wiring) and bind `SubstrateWeight<Runtime>`.
   - **D4 (`ae8e60c`):** `set_default_fee_routing`, `set_protocol_fee_recipient`, `claim_pool_creator_fees` and `withdraw_protocol_fees` have `WeightInfo` entries (placeholders, same layout) and v2 benchmarks; `swap_exact_tokens_for_tokens` is now benchmarked on a routed pool (escrow transfer + both counters), its dearer branch. `claim_pool_creator_fees` needs a resolvable creator: `BenchmarkHelper::set_creator` primes one — the mock through a thread-local, the testnet runtime by planting a launch record (`DexBenchmarkHelper`); on mainnet, which has no launchpad, the benchmark reports `Weightless`. DEX tests: 96 (116 with `runtime-benchmarks`; 86 / 102 before D4).
   - The runtime's `runtime-benchmarks` build had been broken since the stable2407 upgrade, independently of this pallet; `c2dc9b0` repairs it (`AssetId` is `u128` unconditionally — the old `cfg` switch to `u32` under benchmarks would have panicked on `LaunchAssetBase = 2^64` and made `LaunchpadReservedAssets` match nothing; plus `pallet_nfts` / `pallet_treasury` benchmark helpers, `pallet_xcm` config, the `Benchmark` runtime API, and feature forwarding). `cargo check` passes for `{testnet,mainnet}-runtime` with and without `runtime-benchmarks`, zero warnings.
 - **Runtime wiring (§5.3), `491892a`.** `Launchpad: pallet_launchpad = 57` in `construct_runtime!`, `spec_version` 213 → **215** (214 is taken by upstream PR #99, VTRS as EVM native currency). The `Config` impl and the runtime entry are gated on `#[cfg(feature = "testnet-runtime")]`; mainnet keeps `pallet_assets::CreateOrigin = EnsureNever` and no launchpad. Constants: `PalletId = "vtrs/lpd"`, `TotalSupply = 1e9 UNITS`, `Sellable = 8e8 UNITS`, `VirtualTokenFloor = 266_666_667 UNITS`, `LaunchAssetBase = 2^64` (from the DEX-side `LAUNCHPAD_ASSET_ID_START`), graduation target `[3, 3e9] UNITS`, `MinCreationFee = 2·ED + MetadataDepositBase + 2·AssetsStringLimit·MetadataDepositPerByte` against the runtime's actual `100 / 50 / 2`, `RescueDelay = 7 DAYS`, `Treasury = TreasuryAccountId`, `BuyHook = ()`. `RuntimeCall::Launchpad(..)` takes the weight-based `dispatch_info_to_fee` arm, as assumed. The mainnet wasm built from `b5f7260` was checked with `subwasm metadata` (74 pallets, zero occurrences of `launchpad` in the decoded metadata) and a binary string scan (0 hits vs 44 for `VitreusDex`).

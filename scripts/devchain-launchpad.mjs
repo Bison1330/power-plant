@@ -71,7 +71,7 @@ const consts = api.consts.launchpad;
 log(`constants: supply ${fmt(consts.totalSupply)} sellable ${fmt(consts.sellable)} floor ${fmt(consts.virtualTokenFloor)} assetBase ${consts.launchAssetBase.toString()} pallet index ${api.runtimeMetadata.asLatest.pallets.find(p => p.name.toString() === 'Launchpad').index}`);
 
 const nextId = (await api.query.launchpad.nextLaunchId()).toNumber();
-const c = await send('launchpad.create_launch', api.tx.launchpad.createLaunch('Dev Launch', 'DLNCH', null, 0, 0, null), baltathar);
+const c = await send('launchpad.create_launch', api.tx.launchpad.createLaunch('Dev Launch', 'DLNCH', null, 0, 0, null, null), baltathar);
 const created = c.events.find((e) => e.section === 'launchpad' && e.method === 'LaunchCreated');
 const launchId = Number(String(created.data.id).replace(/,/g, ''));
 const assetId = BigInt(String(created.data.assetId).replace(/,/g, ''));
