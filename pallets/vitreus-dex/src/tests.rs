@@ -1224,3 +1224,151 @@ fn seed_burns_pre_seed_donation_when_recipient_cannot_receive_it() {
         assert_eq!(Balances::free_balance(pool_account), SEED_NATIVE);
     });
 }
+
+// ============================================================================
+// D5: amounts and minimums follow the CANONICAL pair order, not the caller's.
+//
+// `canonical_pair` sorts the pair (Native before WithId, lower id first) but
+// the pre-D5 code left amount_a/amount_b and amount_a_min/amount_b_min bound
+// to the caller's argument positions, so `add_liquidity(USDC, VTRS, 1000, 1)`
+// deposited 1000 on the VTRS side and 1 on the USDC side. Same for the
+// minimums of `remove_liquidity`. These tests fail on the pre-D5 code.
+// ============================================================================
+
+#[test]
+fn d5_add_liquidity_non_canonical_order_maps_amounts_to_assets() {
+    new_test_ext().execute_with(|| {
+        // Canonical order is (Native, USDC); the caller passes (USDC, Native).
+        assert_ok!(VitreusDex::create_pool(RuntimeOrigin::root(), usdc(), native(), 3));
+        let key = VitreusDex::canonical_pair(usdc(), native());
+        assert_eq!(key, (native(), usdc()));
+
+        let native_before = Balances::free_balance(ALICE);
+        let usdc_before = Assets::balance(USDC_ID, ALICE);
+        // 100_000 USDC and 40_000 VTRS, given in the caller's (USDC, VTRS) order,
+        // with exact minimums in the same order.
+        assert_ok!(VitreusDex::add_liquidity(
+            RuntimeOrigin::signed(ALICE),
+            usdc(),
+            native(),
+            100_000,
+            40_000,
+            100_000,
+            40_000,
+        ));
+        assert_eq!(native_before - Balances::free_balance(ALICE), 40_000, "VTRS taken");
+        assert_eq!(usdc_before - Assets::balance(USDC_ID, ALICE), 100_000, "USDC taken");
+        let pool = Pools::<Test>::get(key.clone()).unwrap();
+        assert_eq!(pool.reserve_a, 40_000, "reserve_a is the Native side");
+        assert_eq!(pool.reserve_b, 100_000, "reserve_b is the USDC side");
+        // The event reports canonical order.
+        System::assert_has_event(
+            Event::LiquidityAdded {
+                provider: ALICE,
+                asset_a: native(),
+                asset_b: usdc(),
+                amount_a: 40_000,
+                amount_b: 100_000,
+                shares_minted: 63_245 - 1_000,
+            }
+            .into(),
+        );
+
+        // Subsequent deposit, still in the caller's order: the optimal-amount
+        // calculation must use the USDC offer against the USDC reserve.
+        let native_before = Balances::free_balance(BOB);
+        let usdc_before = Assets::balance(USDC_ID, BOB);
+        assert_ok!(VitreusDex::add_liquidity(
+            RuntimeOrigin::signed(BOB),
+            usdc(),
+            native(),
+            50_000, // USDC offered
+            30_000, // VTRS offered; only 20_000 is needed at the pool ratio
+            50_000,
+            20_000,
+        ));
+        assert_eq!(usdc_before - Assets::balance(USDC_ID, BOB), 50_000);
+        assert_eq!(native_before - Balances::free_balance(BOB), 20_000);
+        let pool = Pools::<Test>::get(key).unwrap();
+        assert_eq!((pool.reserve_a, pool.reserve_b), (60_000, 150_000));
+    });
+}
+
+#[test]
+fn d5_remove_liquidity_non_canonical_order_maps_minimums() {
+    new_test_ext().execute_with(|| {
+        assert_ok!(VitreusDex::create_pool(RuntimeOrigin::root(), native(), usdc(), 3));
+        assert_ok!(VitreusDex::add_liquidity(
+            RuntimeOrigin::signed(ALICE),
+            native(),
+            usdc(),
+            40_000,
+            100_000,
+            0,
+            0,
+        ));
+        let key = VitreusDex::canonical_pair(native(), usdc());
+        let pos = LiquidityPositions::<Test>::get(ALICE, key.clone()).unwrap();
+        let total = TotalLiquidity::<Test>::get(key.clone()).unwrap();
+        let shares = pos.shares / 2;
+        let expect_native = shares * 40_000 / total;
+        let expect_usdc = shares * 100_000 / total;
+        assert!(expect_usdc > expect_native);
+
+        // Caller's order is (USDC, Native): the first minimum is the USDC one.
+        // Pre-D5 the (large) USDC minimum was compared against the (small)
+        // Native payout and the call failed with SlippageExceeded.
+        let native_before = Balances::free_balance(ALICE);
+        let usdc_before = Assets::balance(USDC_ID, ALICE);
+        assert_ok!(VitreusDex::remove_liquidity(
+            RuntimeOrigin::signed(ALICE),
+            usdc(),
+            native(),
+            shares,
+            expect_usdc,
+            expect_native,
+        ));
+        assert_eq!(Assets::balance(USDC_ID, ALICE) - usdc_before, expect_usdc);
+        assert_eq!(Balances::free_balance(ALICE) - native_before, expect_native);
+
+        // And a minimum that is genuinely too high on the USDC side still
+        // rejects (recomputed: the remaining position pays a hair more per
+        // share because MINIMUM_LIQUIDITY stays burned).
+        let pool = Pools::<Test>::get(key.clone()).unwrap();
+        let total = TotalLiquidity::<Test>::get(key).unwrap();
+        let payout_usdc = shares * pool.reserve_b / total;
+        assert_noop!(
+            VitreusDex::remove_liquidity(
+                RuntimeOrigin::signed(ALICE),
+                usdc(),
+                native(),
+                shares,
+                payout_usdc + 1,
+                0,
+            ),
+            Error::<Test>::SlippageExceeded
+        );
+    });
+}
+
+#[test]
+fn d5_pool_manager_add_liquidity_for_non_canonical_order() {
+    new_test_ext().execute_with(|| {
+        // The in-runtime trait path (what the launchpad's rescue uses) is the
+        // same body; check it through the trait with a reversed pair.
+        assert_ok!(VitreusDex::do_create_pool(native(), usdc(), 3));
+        let minted = <VitreusDex as PoolManager<u128, NativeOrAssetId, u128, u64>>::add_liquidity_for(
+            &CHARLIE,
+            usdc(),
+            native(),
+            100_000,
+            40_000,
+            100_000,
+            40_000,
+        )
+        .expect("deposit");
+        assert_eq!(minted, 63_245 - 1_000);
+        let pool = Pools::<Test>::get(VitreusDex::canonical_pair(native(), usdc())).unwrap();
+        assert_eq!((pool.reserve_a, pool.reserve_b), (40_000, 100_000));
+    });
+}

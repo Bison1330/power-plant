@@ -126,7 +126,10 @@ pub trait PoolManager<AccountId, AssetKind, Balance, BlockNumber> {
     fn create_pool(asset_a: AssetKind, asset_b: AssetKind, fee_tier: u32) -> DispatchResult;
 
     /// Add liquidity from `who`'s balances, crediting the LP position to
-    /// `who`. Returns the LP shares minted.
+    /// `who`. Returns the LP shares minted. `amount_a`/`amount_a_min` belong
+    /// to `asset_a` and `amount_b`/`amount_b_min` to `asset_b` in whatever
+    /// order the caller passes them (D5); the pool's canonical order is an
+    /// implementation detail.
     fn add_liquidity_for(
         who: &AccountId,
         asset_a: AssetKind,
@@ -759,8 +762,10 @@ pub mod pallet {
 
             ensure!(shares > Zero::zero(), Error::<T>::ZeroAmount);
 
-            // Finding 5: canonicalize pair.
-            let pair = Self::canonical_pair(asset_a, asset_b);
+            // Finding 5 + D5: canonicalize the pair AND the minimums, which the
+            // caller gave in (asset_a, asset_b) order.
+            let (pair, amount_a_min, amount_b_min) =
+                Self::canonical_pair_with(asset_a, asset_b, amount_a_min, amount_b_min);
             let mut pool = Pools::<T>::get(&pair).ok_or(Error::<T>::PoolNotFound)?;
 
             // Finding 2: sync reserves from actual balances before computing withdrawal.
@@ -1517,6 +1522,24 @@ pub mod pallet {
             }
         }
 
+        /// D5: canonicalize a pair together with two per-asset values given in
+        /// the caller's order (amounts, minimums). Returns the canonical pair
+        /// and the values in that same order, so `.1` always belongs to `.0`'s
+        /// asset. Every entry point that accepts `(asset_a, asset_b, x_a, x_b)`
+        /// must go through this rather than binding `x_a` to `pair.0` blindly.
+        pub fn canonical_pair_with<V>(
+            a: T::AssetKind,
+            b: T::AssetKind,
+            x_a: V,
+            x_b: V,
+        ) -> ((T::AssetKind, T::AssetKind), V, V) {
+            if a.encode() <= b.encode() {
+                ((a, b), x_a, x_b)
+            } else {
+                ((b, a), x_b, x_a)
+            }
+        }
+
         /// Finding 2: sync pool reserves from actual on-chain asset balances.
         /// Absorbs any direct transfers or previously uncounted fees into the
         /// reserve tracking so the AMM math operates on accurate figures.
@@ -1799,8 +1822,11 @@ pub mod pallet {
                 Error::<T>::ZeroAmount
             );
 
-            // Finding 5: canonicalize pair.
-            let pair = Self::canonical_pair(asset_a, asset_b);
+            // Finding 5 + D5: canonicalize the pair AND the amounts/minimums,
+            // which the caller gave in (asset_a, asset_b) order. From here on
+            // `amount_a` belongs to `pair.0` and `amount_b` to `pair.1`.
+            let (pair, (amount_a, amount_a_min), (amount_b, amount_b_min)) =
+                Self::canonical_pair_with(asset_a, asset_b, (amount_a, amount_a_min), (amount_b, amount_b_min));
             let mut pool = Pools::<T>::get(&pair).ok_or(Error::<T>::PoolNotFound)?;
             let total_shares =
                 TotalLiquidity::<T>::get(&pair).unwrap_or_else(T::Balance::zero);
