@@ -693,9 +693,19 @@ Errors: see §2 header; plus `ReservedAsset`, `PoolAlreadySeeded` surfaced from 
 
 ## 8. Open items for the implementer
 
-1. **D1–D3 and D5 are landed (`ce34a05`, `5ea3008`, `c7d3752`).** D4 is v2.
-1b. **Benchmarks and weights.** v1 ships constant weights (as the DEX crate does) and no `WeightInfo`; `weights_crossing_buy_refunds_when_not_crossing` from §6.2 stays unwritten until `buy` / `buy_crossing` are benchmarked and the non-crossing branch refunds. `try_state` and the runtime API are likewise not in v1.
-2. `fungibles::metadata::Mutate::set` in `pallet_assets` (stable2407) charges the metadata deposit from `from`; confirm the escrow's reserved-deposit accounting in §2.1.5 against the actual reserve amounts rather than the constants (use `Currency::balance` before/after).
-3. `with_storage_layer` inside a `#[transactional]` extrinsic: confirm the nested layer commits independently (it does in FRAME ≥ polkadot-sdk 1.x; `TransactionOutcome::Rollback` on Err).
-4. Runtime API: `LaunchpadApi::{quote_buy, quote_sell, launch_state}`.
-5. Precompile for EVM users is out of scope until PR #99 lands (VTRS as EVM native currency); when added it must call `do_buy`/`do_sell`, never re-implement pricing.
+### 8.1 Implemented — `b07441a` (`pallets/launchpad`)
+
+- **DEX prerequisites.** D1–D3 and D5 landed in `ce34a05`, `5ea3008`, `c7d3752`. D4 is v2.
+- **Storage (§1), extrinsics (§2), curve math (§3), graduation state machine (§4).** All nine calls (`create_launch`, `buy`, `sell`, `graduate`, `claim_creator_fees`, `set_creator_fee_recipient`, `set_params`, `set_creation_paused`, `force_seed_into_existing_pool`) with `LaunchManageOrigin` governance; `OnCurveBuy` hook trait with `()` as the v1 no-op (§2.7).
+- **Item 2 (metadata deposit), resolved.** `fm15_escrow_survives_full_sellback_and_claims` asserts the escrow's reserved balance equals `MetadataDepositBase + PerByte × (len(name) + len(symbol))` and that `fungibles::Create::create` reserves no `AssetDeposit`, matching §2.1.5's `MinCreationFee` derivation.
+- **Item 3 (nested storage layer), resolved.** `do_buy` runs the deferred seed as `with_storage_layer(|| do_seed(..))` (lib.rs); a seed `Err` rolls back only the seed and leaves the crossing buy committed. Covered by `fm08_crossing_buy_partial_fill_and_deferred_seed` and the `arm_seed_failure` / `disarm_seed_failure` harness.
+- **Test plan §6.1 and §6.2.** 34 tests: `fm01`–`fm16` failure modes, `lifecycle_*`, and `inv_try_state_holds_after_random_sequences` (600-step random buy/sell/claim walk over three launches, checking every §5 invariant after each step). The §5 invariants live in the test-side `check_invariants` helper, **not** in a pallet `try_state` (see 8.2).
+- **Weights.** Constant per-call weights (as the DEX crate ships), no `WeightInfo`.
+
+### 8.2 Still open
+
+1. **`try_state` (§5.3, I12).** Add the pallet hook asserting `NextLaunchId`'s next asset id is free in `pallet_assets`, and port `check_invariants` from `tests.rs` so the same checks run under `try-runtime`. Until then the invariants are only exercised in the mock.
+2. **Runtime API.** `LaunchpadApi::{quote_buy, quote_sell, launch_state}` over the existing `Pallet::quote_buy` / `quote_sell` / `spot_price` / `curve_terms` helpers (§3.5). Nothing in `runtime/vitreus/runtime-api` yet.
+3. **Benchmarks and `WeightInfo` (§6.3).** All nine calls, with `buy_crossing` as the max-weight path including the worst-case `seed_reserved_pool_for` sweep. `weights_crossing_buy_refunds_when_not_crossing` from §6.2 stays unwritten until the non-crossing branch refunds against a benchmarked weight.
+4. **Runtime wiring (§5.3).** The runtime currently carries only the DEX-side `LaunchpadReservedAssets` filter; `pallet-launchpad` is not a runtime dependency and not in `construct_runtime!`. To do: add the crate and the `Config` impl (`Treasury = pallet_treasury::TreasuryAccountId<Runtime>`, `BuyHook = ()`, `LaunchAssetBase = 2^64`, the `Sellable` / `Reserved` / graduation-target constants from §0), confirm `pallet_assets` `CreateOrigin` per network, and decide whether `RuntimeCall::Launchpad(..)` joins the constant-fee list in `dispatch_info_to_fee` (this spec assumes weight-based).
+5. **EVM precompile.** Out of scope until PR #99 lands (VTRS as EVM native currency); when added it must call `do_buy` / `do_sell`, never re-implement pricing.
