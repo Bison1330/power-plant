@@ -354,7 +354,7 @@ pub mod pallet {
 
         /// Supplies non-native asset identifiers for benchmarks.
         #[cfg(feature = "runtime-benchmarks")]
-        type BenchmarkHelper: BenchmarkHelper<Self::AssetKind>;
+        type BenchmarkHelper: BenchmarkHelper<Self::AssetKind, Self::AccountId>;
     }
 
     /// All known pools keyed by their canonical ordered asset pair.

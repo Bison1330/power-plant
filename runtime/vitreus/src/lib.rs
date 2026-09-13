@@ -1226,7 +1226,7 @@ impl pallet_vitreus_dex::Config for Runtime {
     type DefaultSolverBondAmount = DefaultSolverBondAmount;
     type WeightInfo = pallet_vitreus_dex::weights::SubstrateWeight<Runtime>;
     #[cfg(feature = "runtime-benchmarks")]
-    type BenchmarkHelper = ();
+    type BenchmarkHelper = DexBenchmarkHelper;
 }
 
 /// D4: resolves a launch asset's creator fee recipient for the DEX through
@@ -1256,6 +1256,52 @@ pub struct DexProtocolFeeRecipient;
 impl frame_support::traits::Get<AccountId> for DexProtocolFeeRecipient {
     fn get() -> AccountId {
         VitreusDex::protocol_fee_recipient()
+    }
+}
+
+/// DEX benchmark helper: plain `WithId(seed)` assets, and — on testnet, where
+/// the launchpad exists — the ability to prime `LaunchpadCreators` for an
+/// asset by planting a launch record, so `claim_pool_creator_fees` measures
+/// its real path. Mainnet cannot prime a creator; that benchmark reports
+/// `Weightless` there.
+#[cfg(feature = "runtime-benchmarks")]
+pub struct DexBenchmarkHelper;
+#[cfg(feature = "runtime-benchmarks")]
+impl pallet_vitreus_dex::BenchmarkHelper<NativeOrAssetId, AccountId> for DexBenchmarkHelper {
+    fn asset_kind(seed: u32) -> NativeOrAssetId {
+        NativeOrAssetId::WithId(seed.into())
+    }
+
+    #[cfg(feature = "testnet-runtime")]
+    fn set_creator(asset: &NativeOrAssetId, who: &AccountId) -> bool {
+        let NativeOrAssetId::WithId(asset_id) = asset else { return false };
+        let id = pallet_launchpad::NextLaunchId::<Runtime>::get();
+        pallet_launchpad::Launches::<Runtime>::insert(
+            id,
+            pallet_launchpad::Launch::<Runtime> {
+                asset_id: *asset_id,
+                creator: who.clone(),
+                creator_fee_recipient: who.clone(),
+                escrow: Launchpad::escrow_account(id),
+                created_at: System::block_number(),
+                curve: pallet_launchpad::CurveParams {
+                    graduation_target: 3 * UNITS,
+                    virtual_quote: UNITS,
+                    curve_fee_bps: 100,
+                    protocol_share_bps: 5_000,
+                    pool_fee_tier: 3,
+                },
+                params_hash: Default::default(),
+            },
+        );
+        pallet_launchpad::AssetToLaunch::<Runtime>::insert(*asset_id, id);
+        pallet_launchpad::NextLaunchId::<Runtime>::put(id + 1);
+        true
+    }
+
+    #[cfg(not(feature = "testnet-runtime"))]
+    fn set_creator(_: &NativeOrAssetId, _: &AccountId) -> bool {
+        false
     }
 }
 

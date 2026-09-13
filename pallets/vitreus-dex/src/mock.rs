@@ -100,7 +100,34 @@ impl crate::CreatorFeeRecipient<NativeOrAssetId, u128> for MockCreators {
     fn creator_fee_recipient(asset: &NativeOrAssetId) -> Option<u128> {
         match asset {
             NativeOrAssetId::WithId(id) if *id == LAUNCH_ID => Some(CREATOR),
-            _ => None,
+            NativeOrAssetId::WithId(id) => PRIMED_CREATORS.with(|c| c.borrow().get(id).copied()),
+            NativeOrAssetId::Native => None,
+        }
+    }
+}
+
+thread_local! {
+    /// Creators primed by `MockBenchHelper::set_creator` (benchmarks only).
+    static PRIMED_CREATORS: std::cell::RefCell<std::collections::BTreeMap<u32, u128>> =
+        std::cell::RefCell::new(std::collections::BTreeMap::new());
+}
+
+/// Benchmark helper for the mock: `WithId(seed)` assets, and creators primed
+/// through the thread-local `MockCreators` consults.
+#[cfg(feature = "runtime-benchmarks")]
+pub struct MockBenchHelper;
+#[cfg(feature = "runtime-benchmarks")]
+impl crate::BenchmarkHelper<NativeOrAssetId, u128> for MockBenchHelper {
+    fn asset_kind(seed: u32) -> NativeOrAssetId {
+        NativeOrAssetId::WithId(seed)
+    }
+    fn set_creator(asset: &NativeOrAssetId, who: &u128) -> bool {
+        match asset {
+            NativeOrAssetId::WithId(id) => {
+                PRIMED_CREATORS.with(|c| c.borrow_mut().insert(*id, *who));
+                true
+            },
+            NativeOrAssetId::Native => false,
         }
     }
 }
@@ -131,7 +158,7 @@ impl Config for Test {
     type DefaultSolverBondAmount = ConstU128<1_000_000_000_000>;
     type WeightInfo = ();
     #[cfg(feature = "runtime-benchmarks")]
-    type BenchmarkHelper = ();
+    type BenchmarkHelper = MockBenchHelper;
 }
 
 pub(crate) fn new_test_ext() -> sp_io::TestExternalities {

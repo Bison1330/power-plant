@@ -17,8 +17,10 @@
 //! and a dearer branch, `benchmarking.rs` sets up the dearer one:
 //! `register_solver` re-registers a previously deregistered account,
 //! `commit_fill` displaces a prior commitment, `settle_intent` and
-//! `slash_solver` perform every transfer (non-zero profit / bond split), and
-//! `add_liquidity` extends an existing position.
+//! `slash_solver` perform every transfer (non-zero profit / bond split),
+//! `add_liquidity` extends an existing position, and
+//! `swap_exact_tokens_for_tokens` runs on a pool with D4 routing set so the
+//! escrow transfer and both fee counters are measured.
 
 #![cfg_attr(rustfmt, rustfmt_skip)]
 #![allow(unused_parens)]

@@ -20,17 +20,26 @@ use sp_runtime::traits::UniqueSaturatedFrom;
 
 /// Supplies non-native asset identifiers for benchmarking. Bound in `Config`
 /// under `runtime-benchmarks` only.
-pub trait BenchmarkHelper<AssetKind> {
+pub trait BenchmarkHelper<AssetKind, AccountId> {
     /// A non-native, non-reserved asset kind for `seed`. Distinct seeds must
     /// yield distinct assets.
     fn asset_kind(seed: u32) -> AssetKind;
+
+    /// D4: make `Config::CreatorFeeRecipient` resolve `asset` to `who`, if the
+    /// runtime's lookup can be primed (the launchpad-backed runtime plants a
+    /// launch record). Returns `false` when it cannot; the
+    /// `claim_pool_creator_fees` benchmark then reports `Weightless`.
+    fn set_creator(asset: &AssetKind, who: &AccountId) -> bool;
 }
 
-impl<AssetId: From<u32> + Ord> BenchmarkHelper<frame_support::traits::fungible::NativeOrWithId<AssetId>>
-    for ()
+impl<AssetId: From<u32> + Ord, AccountId>
+    BenchmarkHelper<frame_support::traits::fungible::NativeOrWithId<AssetId>, AccountId> for ()
 {
     fn asset_kind(seed: u32) -> frame_support::traits::fungible::NativeOrWithId<AssetId> {
         frame_support::traits::fungible::NativeOrWithId::WithId(seed.into())
+    }
+    fn set_creator(_: &frame_support::traits::fungible::NativeOrWithId<AssetId>, _: &AccountId) -> bool {
+        false
     }
 }
 
@@ -184,6 +193,14 @@ mod benchmarks {
     fn swap_exact_tokens_for_tokens() {
         let provider: T::AccountId = account("provider", 0, 0);
         let asset = setup_pool::<T>(&provider);
+        // D4: the dearer branch — a pool that routes both slices, so the swap
+        // also transfers to the fee escrow and bumps both counters.
+        let pair = Dex::<T>::canonical_pair(native::<T>(), asset.clone());
+        Pools::<T>::mutate(&pair, |p| {
+            if let Some(p) = p {
+                p.routing = FeeRouting { protocol_bps: 5, creator_bps: 5 };
+            }
+        });
         let caller: T::AccountId = whitelisted_caller();
         fund_native::<T>(&caller);
         T::Assets::mint_into(asset.clone(), &caller, big::<T>()).expect("mint");
@@ -200,6 +217,8 @@ mod benchmarks {
         );
 
         assert!(T::Assets::balance(native::<T>(), &caller) > before);
+        assert!(!CreatorFeesUnclaimed::<T>::get(&pair).is_zero());
+        assert!(!ProtocolFeesUnclaimed::<T>::get().is_zero());
     }
 
     #[benchmark]
@@ -390,6 +409,71 @@ mod benchmarks {
 
         assert_eq!(SolverBondAmount::<T>::get(), Some(v));
         Ok(())
+    }
+
+    // ---- D4 ---------------------------------------------------------------
+
+    #[benchmark]
+    fn set_default_fee_routing() -> Result<(), BenchmarkError> {
+        let origin = manage_origin::<T>()?;
+
+        #[extrinsic_call]
+        _(origin as T::RuntimeOrigin, 5, 5);
+
+        assert_eq!(DefaultFeeRouting::<T>::get(), FeeRouting { protocol_bps: 5, creator_bps: 5 });
+        Ok(())
+    }
+
+    #[benchmark]
+    fn set_protocol_fee_recipient() -> Result<(), BenchmarkError> {
+        let origin = manage_origin::<T>()?;
+        let recipient: T::AccountId = account("recipient", 0, 0);
+
+        #[extrinsic_call]
+        _(origin as T::RuntimeOrigin, Some(recipient.clone()));
+
+        assert_eq!(ProtocolFeeRecipient::<T>::get(), Some(recipient));
+        Ok(())
+    }
+
+    /// Accrued creator fees sit in the escrow with a counter; the claim's
+    /// cost does not depend on how they got there, so they are planted.
+    #[benchmark]
+    fn claim_pool_creator_fees() -> Result<(), BenchmarkError> {
+        let provider: T::AccountId = account("provider", 0, 0);
+        let asset = setup_pool::<T>(&provider);
+        let caller: T::AccountId = whitelisted_caller();
+        if !T::BenchmarkHelper::set_creator(&asset, &caller) {
+            return Err(BenchmarkError::Weightless);
+        }
+        let pair = Dex::<T>::canonical_pair(native::<T>(), asset.clone());
+        let escrow = Dex::<T>::fee_escrow_account();
+        T::Assets::mint_into(native::<T>(), &escrow, big::<T>()).expect("fund escrow");
+        CreatorFeesUnclaimed::<T>::insert(&pair, trade::<T>());
+        let before = T::Assets::balance(native::<T>(), &caller);
+
+        #[extrinsic_call]
+        _(RawOrigin::Signed(caller.clone()), asset);
+
+        assert_eq!(T::Assets::balance(native::<T>(), &caller), before + trade::<T>());
+        assert!(CreatorFeesUnclaimed::<T>::get(&pair).is_zero());
+        Ok(())
+    }
+
+    #[benchmark]
+    fn withdraw_protocol_fees() {
+        let caller: T::AccountId = whitelisted_caller();
+        let escrow = Dex::<T>::fee_escrow_account();
+        T::Assets::mint_into(native::<T>(), &escrow, big::<T>()).expect("fund escrow");
+        ProtocolFeesUnclaimed::<T>::put(trade::<T>());
+        let recipient = Dex::<T>::protocol_fee_recipient();
+        let before = T::Assets::balance(native::<T>(), &recipient);
+
+        #[extrinsic_call]
+        _(RawOrigin::Signed(caller));
+
+        assert_eq!(T::Assets::balance(native::<T>(), &recipient), before + trade::<T>());
+        assert!(ProtocolFeesUnclaimed::<T>::get().is_zero());
     }
 
     impl_benchmark_test_suite!(Dex, crate::mock::new_test_ext(), crate::mock::Test);
