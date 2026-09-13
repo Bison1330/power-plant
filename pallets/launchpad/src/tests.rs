@@ -304,7 +304,8 @@ fn fm01_seed_into_existing_liquid_pool_is_rejected() {
         // record directly, then add liquidity at ~10^4× p_end (1 VTRS per 1000 tokens).
         Pools::<Test>::insert(
             pair(id),
-            PoolInfo { reserve_a: 0, reserve_b: 0, fee_tier: 3, total_fees_collected: 0, pool_account: pool_account(id) },
+            PoolInfo { reserve_a: 0, reserve_b: 0, fee_tier: 3, total_fees_collected: 0, routing: pallet_vitreus_dex::FeeRouting::default(),
+                pool_account: pool_account(id) },
         );
         TotalLiquidity::<Test>::insert(pair(id), 0u128);
         assert_ok!(VitreusDex::do_add_liquidity_for(&BOB, native(), kind(id), UNIT, 1_000 * UNIT, 0, 0));
@@ -928,7 +929,8 @@ fn fm11_every_complete_state_has_a_forward_path() {
         buy(BOB, id, 10 * UNIT);
         Pools::<Test>::insert(
             pair(id),
-            PoolInfo { reserve_a: 0, reserve_b: 0, fee_tier: 3, total_fees_collected: 0, pool_account: pool_account(id) },
+            PoolInfo { reserve_a: 0, reserve_b: 0, fee_tier: 3, total_fees_collected: 0, routing: pallet_vitreus_dex::FeeRouting::default(),
+                pool_account: pool_account(id) },
         );
         TotalLiquidity::<Test>::insert(pair(id), 0u128);
         // liquidity at roughly p_end so the rescue is within tolerance
@@ -961,7 +963,8 @@ fn fm11_every_complete_state_has_a_forward_path() {
         let id = create(ALICE);
         Pools::<Test>::insert(
             pair(id),
-            PoolInfo { reserve_a: 0, reserve_b: 0, fee_tier: 3, total_fees_collected: 0, pool_account: pool_account(id) },
+            PoolInfo { reserve_a: 0, reserve_b: 0, fee_tier: 3, total_fees_collected: 0, routing: pallet_vitreus_dex::FeeRouting::default(),
+                pool_account: pool_account(id) },
         );
         TotalLiquidity::<Test>::insert(pair(id), 0u128);
         cross(BOB, id);
@@ -1211,5 +1214,80 @@ fn weights_crossing_buy_refunds_when_not_crossing() {
         assert_eq!(call.get_dispatch_info().weight, <() as W>::create_launch(4, 4));
         let post = Launchpad::create_launch(origin(CHARLIE), bv(b"Meme"), bv(b"MEME"), None, 0, 0, None).unwrap();
         assert_eq!(post.actual_weight, None);
+    });
+}
+
+// ---- D4: post-graduation fee routing through the DEX -------------------
+//
+// The DEX snapshots the governance split into the pool it seeds at
+// graduation and routes the VTRS slices into its fee escrow; the creator's
+// share is claimable by whoever the launch currently names as
+// `creator_fee_recipient`, resolved through the runtime adapter at claim
+// time. Protocol fees are pulled to the shared recipient.
+
+#[test]
+fn d4_graduated_pool_routes_fees_and_the_launch_recipient_claims_them() {
+    use pallet_vitreus_dex::{CreatorFeesUnclaimed, FeeRouting, ProtocolFeesUnclaimed};
+
+    new_test_ext().execute_with(|| {
+        assert_ok!(VitreusDex::set_default_fee_routing(RuntimeOrigin::root(), 5, 5));
+        let id = create(ALICE);
+        cross(BOB, id);
+        assert_eq!(state(id).phase, Phase::Graduated);
+        assert_eq!(
+            Pools::<Test>::get(pair(id)).unwrap().routing,
+            FeeRouting { protocol_bps: 5, creator_bps: 5 },
+            "the seed snapshots the split in force at graduation"
+        );
+
+        // A DEX swap on the graduated pool routes 5 + 5 bps of the VTRS leg.
+        let amount_in = 10 * UNIT;
+        let slice = amount_in * 5 / 10_000;
+        assert_ok!(VitreusDex::swap_exact_tokens_for_tokens(origin(BOB), native(), kind(id), amount_in, 0, BOB.clone()));
+        assert_eq!(CreatorFeesUnclaimed::<Test>::get(pair(id)), slice);
+        assert_eq!(ProtocolFeesUnclaimed::<Test>::get(), slice);
+        assert_eq!(vtrs(VitreusDex::fee_escrow_account()), 2 * slice);
+
+        // Only the launch's creator fee recipient can claim.
+        assert_noop!(
+            VitreusDex::claim_pool_creator_fees(origin(BOB), kind(id)),
+            dex_err(pallet_vitreus_dex::Error::<Test>::NotCreatorFeeRecipient)
+        );
+        let before = vtrs(ALICE);
+        assert_ok!(VitreusDex::claim_pool_creator_fees(origin(ALICE), kind(id)));
+        assert_eq!(vtrs(ALICE) - before, slice);
+        assert_eq!(CreatorFeesUnclaimed::<Test>::get(pair(id)), 0);
+
+        // Handing the launch's fee stream to DAVE moves the DEX claim right
+        // with it — no propagation, the DEX asks the launchpad at claim time.
+        assert_ok!(Launchpad::set_creator_fee_recipient(origin(ALICE), id, DAVE));
+        assert_ok!(VitreusDex::swap_exact_tokens_for_tokens(origin(BOB), native(), kind(id), amount_in, 0, BOB.clone()));
+        assert_noop!(
+            VitreusDex::claim_pool_creator_fees(origin(ALICE), kind(id)),
+            dex_err(pallet_vitreus_dex::Error::<Test>::NotCreatorFeeRecipient)
+        );
+        let before = vtrs(DAVE);
+        assert_ok!(VitreusDex::claim_pool_creator_fees(origin(DAVE), kind(id)));
+        assert_eq!(vtrs(DAVE) - before, slice);
+
+        // Protocol fees go to the shared recipient — the same account the
+        // launchpad's curve fees already land in — when anyone pulls them.
+        assert_eq!(VitreusDex::protocol_fee_recipient(), TREASURY);
+        let treasury_before = vtrs(TREASURY);
+        assert_ok!(VitreusDex::withdraw_protocol_fees(origin(CHARLIE)));
+        assert_eq!(vtrs(TREASURY) - treasury_before, 2 * slice);
+        assert_eq!(vtrs(VitreusDex::fee_escrow_account()), 0);
+    });
+}
+
+#[test]
+fn d4_creator_fee_recipient_lookup_is_none_for_unknown_assets() {
+    new_test_ext().execute_with(|| {
+        assert_eq!(Launchpad::creator_fee_recipient_for(asset_of(0)), None);
+        let id = create(ALICE);
+        assert_eq!(Launchpad::creator_fee_recipient_for(asset_of(id)), Some(ALICE));
+        assert_ok!(Launchpad::set_creator_fee_recipient(origin(ALICE), id, BOB));
+        assert_eq!(Launchpad::creator_fee_recipient_for(asset_of(id)), Some(BOB));
+        assert_eq!(Launchpad::creator_fee_recipient_for(asset_of(id) + 1), None);
     });
 }

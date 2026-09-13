@@ -269,7 +269,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
     // 214 is taken by upstream PR #99 (VTRS as EVM native currency); this
     // runtime adds pallet-launchpad on top of 213 and skips to 215 so the two
     // never share a number.
-    spec_version: 215,
+    spec_version: 216,
     impl_version: 0,
     apis: RUNTIME_API_VERSIONS,
     transaction_version: 4,
@@ -1216,12 +1216,47 @@ impl pallet_vitreus_dex::Config for Runtime {
     type EnergyAsset = VNRG;
     type ReservedAssets = LaunchpadReservedAssets;
     type ExcessRecipient = xcm_config::TreasuryAccount;
+    // D4: protocol fees default to the runtime Treasury; governance can
+    // redirect them with `set_protocol_fee_recipient` (see LAUNCHPAD_SPEC §5.2 D4
+    // for why this is storage, not a constant).
+    type DefaultProtocolFeeRecipient = xcm_config::TreasuryAccount;
+    type CreatorFeeRecipient = LaunchpadCreators;
     type DefaultBidWindowBlocks = DefaultBidWindowBlocks;
     type DefaultSettlementWindowBlocks = DefaultSettlementWindowBlocks;
     type DefaultSolverBondAmount = DefaultSolverBondAmount;
     type WeightInfo = pallet_vitreus_dex::weights::SubstrateWeight<Runtime>;
     #[cfg(feature = "runtime-benchmarks")]
     type BenchmarkHelper = ();
+}
+
+/// D4: resolves a launch asset's creator fee recipient for the DEX through
+/// the launchpad, so `set_creator_fee_recipient` moves the DEX claim right
+/// with no propagation. Mainnet has no launchpad and therefore no creators.
+pub struct LaunchpadCreators;
+#[cfg(feature = "testnet-runtime")]
+impl pallet_vitreus_dex::CreatorFeeRecipient<NativeOrAssetId, AccountId> for LaunchpadCreators {
+    fn creator_fee_recipient(asset: &NativeOrAssetId) -> Option<AccountId> {
+        match asset {
+            NativeOrAssetId::WithId(id) => Launchpad::creator_fee_recipient_for(*id),
+            NativeOrAssetId::Native => None,
+        }
+    }
+}
+#[cfg(not(feature = "testnet-runtime"))]
+impl pallet_vitreus_dex::CreatorFeeRecipient<NativeOrAssetId, AccountId> for LaunchpadCreators {
+    fn creator_fee_recipient(_: &NativeOrAssetId) -> Option<AccountId> {
+        None
+    }
+}
+
+/// D4: the launchpad pays its protocol share (curve fees, creation-fee
+/// surplus, rescue remainder) to wherever the DEX pays its protocol fees,
+/// so all protocol revenue lands in one governance-settable place.
+pub struct DexProtocolFeeRecipient;
+impl frame_support::traits::Get<AccountId> for DexProtocolFeeRecipient {
+    fn get() -> AccountId {
+        VitreusDex::protocol_fee_recipient()
+    }
 }
 
 // ---- pallet-launchpad (testnet-runtime only) --------------------------------
@@ -1278,7 +1313,7 @@ impl pallet_launchpad::Config for Runtime {
     type NativeAssetKind = NativeAsset;
     type IntoAssetKind = LaunchpadAssetKind;
     type Dex = VitreusDex;
-    type Treasury = xcm_config::TreasuryAccount;
+    type Treasury = DexProtocolFeeRecipient;
     type PalletId = LaunchpadPalletId;
     type TotalSupply = LaunchpadTotalSupply;
     type Sellable = LaunchpadSellable;

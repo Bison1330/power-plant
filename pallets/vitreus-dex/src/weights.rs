@@ -46,6 +46,10 @@ pub trait WeightInfo {
     fn set_bid_window() -> Weight;
     fn set_settlement_window() -> Weight;
     fn set_solver_bond_amount() -> Weight;
+    fn set_default_fee_routing() -> Weight;
+    fn set_protocol_fee_recipient() -> Weight;
+    fn claim_pool_creator_fees() -> Weight;
+    fn withdraw_protocol_fees() -> Weight;
 }
 
 /// Weights for pallet-vitreus-dex using the Substrate node and recommended hardware.
@@ -99,6 +103,18 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
     fn set_solver_bond_amount() -> Weight {
         Weight::from_parts(50_000_000, 5_000)
     }
+    fn set_default_fee_routing() -> Weight {
+        Weight::from_parts(50_000_000, 5_000)
+    }
+    fn set_protocol_fee_recipient() -> Weight {
+        Weight::from_parts(30_000_000, 3_000)
+    }
+    fn claim_pool_creator_fees() -> Weight {
+        Weight::from_parts(150_000_000, 10_000)
+    }
+    fn withdraw_protocol_fees() -> Weight {
+        Weight::from_parts(150_000_000, 10_000)
+    }
 }
 
 // For backwards compatibility and tests.
@@ -150,5 +166,17 @@ impl WeightInfo for () {
     }
     fn set_solver_bond_amount() -> Weight {
         Weight::from_parts(50_000_000, 5_000)
+    }
+    fn set_default_fee_routing() -> Weight {
+        Weight::from_parts(50_000_000, 5_000)
+    }
+    fn set_protocol_fee_recipient() -> Weight {
+        Weight::from_parts(30_000_000, 3_000)
+    }
+    fn claim_pool_creator_fees() -> Weight {
+        Weight::from_parts(150_000_000, 10_000)
+    }
+    fn withdraw_protocol_fees() -> Weight {
+        Weight::from_parts(150_000_000, 10_000)
     }
 }

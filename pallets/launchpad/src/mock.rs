@@ -135,6 +135,18 @@ impl Contains<NativeOrAssetId> for ReservedAssets {
     }
 }
 
+/// D4: the runtime-style adapter that lets the DEX resolve a launch asset's
+/// creator fee recipient through the launchpad.
+pub struct LaunchpadCreators;
+impl pallet_vitreus_dex::CreatorFeeRecipient<NativeOrAssetId, Acc> for LaunchpadCreators {
+    fn creator_fee_recipient(asset: &NativeOrAssetId) -> Option<Acc> {
+        match asset {
+            NativeOrAssetId::WithId(id) => Launchpad::creator_fee_recipient_for(*id),
+            NativeOrAssetId::Native => None,
+        }
+    }
+}
+
 impl pallet_vitreus_dex::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type ManageOrigin = EnsureRoot<Acc>;
@@ -146,6 +158,8 @@ impl pallet_vitreus_dex::Config for Test {
     type EnergyAsset = EnergyAsset;
     type ReservedAssets = ReservedAssets;
     type ExcessRecipient = ExcessRecipient;
+    type DefaultProtocolFeeRecipient = TreasuryAccount;
+    type CreatorFeeRecipient = LaunchpadCreators;
     type DefaultBidWindowBlocks = ConstU64<10>;
     type DefaultSettlementWindowBlocks = ConstU64<5>;
     type DefaultSolverBondAmount = ConstU128<1_000_000_000_000>;

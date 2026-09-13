@@ -629,6 +629,15 @@ pub mod pallet {
             T::LaunchAssetBase::get().saturating_add(AssetIdOf::<T>::unique_saturated_from(id))
         }
 
+        /// D4: who may claim the DEX creator share of `asset`'s graduated
+        /// pool — the launch's current `creator_fee_recipient`, so a
+        /// `set_creator_fee_recipient` moves the DEX stream with it. The
+        /// runtime binds `pallet_vitreus_dex::Config::CreatorFeeRecipient`
+        /// to this through an adapter; the DEX itself knows no creators.
+        pub fn creator_fee_recipient_for(asset: AssetIdOf<T>) -> Option<T::AccountId> {
+            AssetToLaunch::<T>::get(asset).and_then(Launches::<T>::get).map(|l| l.creator_fee_recipient)
+        }
+
         /// `Reserved = TotalSupply − Sellable`.
         pub fn reserved() -> BalanceOf<T> {
             T::TotalSupply::get().saturating_sub(T::Sellable::get())

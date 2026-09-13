@@ -90,6 +90,21 @@ parameter_types! {
     pub const ExcessRecipient: u128 = TREASURY;
 }
 
+/// D4: the creator on record for a reserved asset in tests (stands in for
+/// the launchpad's `creator_fee_recipient`). `LAUNCH_ID` → `CREATOR`;
+/// everything else has no creator.
+pub const CREATOR: u128 = 77;
+pub const LAUNCH_ID: u32 = RESERVED_ASSET_BASE + 1;
+pub struct MockCreators;
+impl crate::CreatorFeeRecipient<NativeOrAssetId, u128> for MockCreators {
+    fn creator_fee_recipient(asset: &NativeOrAssetId) -> Option<u128> {
+        match asset {
+            NativeOrAssetId::WithId(id) if *id == LAUNCH_ID => Some(CREATOR),
+            _ => None,
+        }
+    }
+}
+
 /// Mock reserved range: every `WithId(id)` with `id >= RESERVED_ASSET_BASE`.
 pub struct ReservedAssets;
 impl frame_support::traits::Contains<NativeOrAssetId> for ReservedAssets {
@@ -109,6 +124,8 @@ impl Config for Test {
     type EnergyAsset = EnergyAsset;
     type ReservedAssets = ReservedAssets;
     type ExcessRecipient = ExcessRecipient;
+    type DefaultProtocolFeeRecipient = ExcessRecipient;
+    type CreatorFeeRecipient = MockCreators;
     type DefaultBidWindowBlocks = ConstU64<10>;
     type DefaultSettlementWindowBlocks = ConstU64<5>;
     type DefaultSolverBondAmount = ConstU128<1_000_000_000_000>;

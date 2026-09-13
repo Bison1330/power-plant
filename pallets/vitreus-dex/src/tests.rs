@@ -809,7 +809,7 @@ fn scale_narrowing_errors_instead_of_truncating() {
 // quote-first transfer order observable.
 // ============================================================================
 
-const LAUNCH_ID: u32 = RESERVED_ASSET_BASE + 1;
+// LAUNCH_ID lives in mock.rs (D4: the mock creator lookup keys on it).
 
 fn launch() -> NativeOrAssetId {
     NativeOrAssetId::WithId(LAUNCH_ID)
@@ -1124,6 +1124,7 @@ fn seed_rejects_wrong_assets_double_seed_and_mismatched_adoption() {
                 fee_tier: 10,
                 total_fees_collected: 0,
                 pool_account: VitreusDex::pool_account_for(native(), launch()),
+                routing: crate::FeeRouting::default(),
             },
         );
         TotalLiquidity::<Test>::insert(key.clone(), 0u128);
@@ -1372,3 +1373,330 @@ fn d5_pool_manager_add_liquidity_for_non_canonical_order() {
         assert_eq!((pool.reserve_a, pool.reserve_b), (40_000, 100_000));
     });
 }
+
+// ===========================================================================
+// D4 — per-pool fee routing. Routed slices are always native (VTRS), pulled
+// by the beneficiaries from a fee escrow sub-account, never pushed inside a
+// swap. Splits are snapshotted per pool at creation / seeding.
+// ===========================================================================
+
+use crate::{
+    CreatorFeesUnclaimed, DefaultFeeRouting, FeeRouting, ProtocolFeeRecipient, ProtocolFeesUnclaimed,
+};
+
+fn set_routing(protocol_bps: u16, creator_bps: u16) {
+    assert_ok!(VitreusDex::set_default_fee_routing(RuntimeOrigin::root(), protocol_bps, creator_bps));
+}
+
+fn escrow() -> u128 {
+    VitreusDex::fee_escrow_account()
+}
+
+/// A seeded launch pool with the given default split in force at seed time.
+fn seeded_launch_pool(protocol_bps: u16, creator_bps: u16) -> (NativeOrAssetId, NativeOrAssetId) {
+    setup_reserved_asset();
+    set_routing(protocol_bps, creator_bps);
+    seed(ESCROW).expect("seed");
+    VitreusDex::canonical_pair(native(), launch())
+}
+
+#[test]
+fn d4_default_routing_is_zero_and_swaps_route_nothing() {
+    new_test_ext().execute_with(|| {
+        assert_eq!(DefaultFeeRouting::<Test>::get(), FeeRouting::default());
+        let key = seeded_launch_pool(0, 0);
+        assert_eq!(Pools::<Test>::get(key.clone()).unwrap().routing, FeeRouting::default());
+
+        assert_ok!(VitreusDex::swap_exact_tokens_for_tokens(
+            RuntimeOrigin::signed(BOB),
+            native(),
+            launch(),
+            100 * UNIT,
+            0,
+            BOB,
+        ));
+        assert_eq!(Balances::free_balance(escrow()), 0);
+        assert_eq!(ProtocolFeesUnclaimed::<Test>::get(), 0);
+        assert_eq!(CreatorFeesUnclaimed::<Test>::get(key), 0);
+        assert!(!System::events()
+            .iter()
+            .any(|r| matches!(r.event, RuntimeEvent::VitreusDex(Event::FeesRouted { .. }))));
+    });
+}
+
+#[test]
+fn d4_set_default_fee_routing_validates_and_requires_manage_origin() {
+    new_test_ext().execute_with(|| {
+        assert_noop!(
+            VitreusDex::set_default_fee_routing(RuntimeOrigin::signed(ALICE), 5, 5),
+            sp_runtime::DispatchError::BadOrigin
+        );
+        // 11 bps could not be carried by the 0.1% tier.
+        assert_noop!(
+            VitreusDex::set_default_fee_routing(RuntimeOrigin::root(), 6, 5),
+            Error::<Test>::InvalidFeeRouting
+        );
+        set_routing(5, 5);
+        assert_eq!(DefaultFeeRouting::<Test>::get(), FeeRouting { protocol_bps: 5, creator_bps: 5 });
+        System::assert_has_event(
+            Event::DefaultFeeRoutingSet { routing: FeeRouting { protocol_bps: 5, creator_bps: 5 } }.into(),
+        );
+        set_routing(10, 0);
+        assert_eq!(DefaultFeeRouting::<Test>::get().routed_bps(), crate::MAX_ROUTED_BPS);
+    });
+}
+
+#[test]
+fn d4_create_pool_snapshots_protocol_share_and_folds_creator_share() {
+    new_test_ext().execute_with(|| {
+        set_routing(5, 5);
+        // Governance-created pool with a native side: nobody could claim a
+        // creator share, so it folds into the pool.
+        assert_ok!(VitreusDex::create_pool(RuntimeOrigin::root(), native(), usdc(), 3));
+        let key = VitreusDex::canonical_pair(native(), usdc());
+        assert_eq!(Pools::<Test>::get(key).unwrap().routing, FeeRouting { protocol_bps: 5, creator_bps: 0 });
+        // No native side: nothing can be routed in VTRS.
+        assert_ok!(VitreusDex::create_pool(RuntimeOrigin::root(), usdc(), vnrg(), 3));
+        assert_eq!(Pools::<Test>::get(pair()).unwrap().routing, FeeRouting::default());
+    });
+}
+
+#[test]
+fn d4_seed_snapshots_full_default_and_later_changes_never_touch_existing_pools() {
+    new_test_ext().execute_with(|| {
+        let key = seeded_launch_pool(5, 5);
+        assert_eq!(Pools::<Test>::get(key.clone()).unwrap().routing, FeeRouting { protocol_bps: 5, creator_bps: 5 });
+
+        set_routing(10, 0);
+        assert_eq!(
+            Pools::<Test>::get(key).unwrap().routing,
+            FeeRouting { protocol_bps: 5, creator_bps: 5 },
+            "a live pool's split is a snapshot, not a live read"
+        );
+        assert_ok!(VitreusDex::create_pool(RuntimeOrigin::root(), native(), usdc(), 1));
+        let usdc_key = VitreusDex::canonical_pair(native(), usdc());
+        assert_eq!(Pools::<Test>::get(usdc_key).unwrap().routing, FeeRouting { protocol_bps: 10, creator_bps: 0 });
+    });
+}
+
+#[test]
+fn d4_swap_native_in_routes_slices_out_of_the_fee() {
+    new_test_ext().execute_with(|| {
+        let key = seeded_launch_pool(5, 5);
+        let pool_account = VitreusDex::pool_account_for(native(), launch());
+
+        // Pricing is identical to pre-D4: the tier is still taken from the input.
+        let amount_in = 100 * UNIT;
+        let fee = amount_in * 3 / 1_000;
+        let after_fee = amount_in - fee;
+        let expected_out = mul_div_u256(SEED_TOKEN, after_fee, SEED_NATIVE + after_fee);
+        let protocol = amount_in * 5 / 10_000;
+        let creator = amount_in * 5 / 10_000;
+        assert!(protocol + creator < fee);
+
+        let token_before = Assets::balance(LAUNCH_ID, BOB);
+        assert_ok!(VitreusDex::swap_exact_tokens_for_tokens(
+            RuntimeOrigin::signed(BOB),
+            native(),
+            launch(),
+            amount_in,
+            expected_out,
+            BOB,
+        ));
+        assert_eq!(Assets::balance(LAUNCH_ID, BOB) - token_before, expected_out);
+
+        // Slices left the pool account for the escrow and were counted.
+        assert_eq!(Balances::free_balance(escrow()), protocol + creator);
+        assert_eq!(ProtocolFeesUnclaimed::<Test>::get(), protocol);
+        assert_eq!(CreatorFeesUnclaimed::<Test>::get(key.clone()), creator);
+        System::assert_has_event(Event::FeesRouted { pool: key.clone(), protocol, creator }.into());
+
+        // Reserves unchanged from the pre-D4 formula; the pool account holds
+        // reserves plus only the pool's share of the fee, so a later
+        // sync_reserves can never absorb the routed part.
+        let pool = Pools::<Test>::get(key).unwrap();
+        assert_eq!(pool.reserve_a, SEED_NATIVE + after_fee);
+        assert_eq!(pool.reserve_b, SEED_TOKEN - expected_out);
+        assert_eq!(pool.total_fees_collected, fee);
+        assert_eq!(Balances::free_balance(pool_account), pool.reserve_a + (fee - protocol - creator));
+
+        let k_before = sp_core::U256::from(SEED_NATIVE) * sp_core::U256::from(SEED_TOKEN);
+        let k_after = sp_core::U256::from(pool.reserve_a) * sp_core::U256::from(pool.reserve_b);
+        assert!(k_after >= k_before);
+    });
+}
+
+#[test]
+fn d4_swap_native_out_routes_slices_from_the_gross_output() {
+    new_test_ext().execute_with(|| {
+        let key = seeded_launch_pool(5, 5);
+        let pool_account = VitreusDex::pool_account_for(native(), launch());
+
+        // Token in: the pool keeps (tier − routed) = 20 bps of the input; the
+        // routed 10 bps come off the gross native output.
+        let amount_in = 1_000_000 * UNIT;
+        let fee = amount_in * 20 / 10_000;
+        let after_fee = amount_in - fee;
+        let gross = mul_div_u256(SEED_NATIVE, after_fee, SEED_TOKEN + after_fee);
+        let protocol = gross * 5 / 10_000;
+        let creator = gross * 5 / 10_000;
+        let net = gross - protocol - creator;
+        assert!(net > 0);
+
+        // The slippage bound applies to what the trader actually receives.
+        assert_noop!(
+            VitreusDex::swap_exact_tokens_for_tokens(
+                RuntimeOrigin::signed(BOB),
+                launch(),
+                native(),
+                amount_in,
+                net + 1,
+                BOB,
+            ),
+            Error::<Test>::SlippageExceeded
+        );
+        let native_before = Balances::free_balance(BOB);
+        assert_ok!(VitreusDex::swap_exact_tokens_for_tokens(
+            RuntimeOrigin::signed(BOB),
+            launch(),
+            native(),
+            amount_in,
+            net,
+            BOB,
+        ));
+        assert_eq!(Balances::free_balance(BOB) - native_before, net);
+        assert_eq!(Balances::free_balance(escrow()), protocol + creator);
+        assert_eq!(ProtocolFeesUnclaimed::<Test>::get(), protocol);
+        assert_eq!(CreatorFeesUnclaimed::<Test>::get(key.clone()), creator);
+
+        let pool = Pools::<Test>::get(key).unwrap();
+        assert_eq!(pool.reserve_a, SEED_NATIVE - gross);
+        assert_eq!(pool.reserve_b, SEED_TOKEN + after_fee);
+        assert_eq!(pool.total_fees_collected, fee);
+        assert_eq!(Balances::free_balance(pool_account), pool.reserve_a);
+        assert_eq!(Assets::balance(LAUNCH_ID, pool_account), pool.reserve_b + fee);
+
+        let k_before = sp_core::U256::from(SEED_NATIVE) * sp_core::U256::from(SEED_TOKEN);
+        let k_after = sp_core::U256::from(pool.reserve_a) * sp_core::U256::from(pool.reserve_b);
+        assert!(k_after >= k_before);
+    });
+}
+
+#[test]
+fn d4_pool_without_native_side_routes_nothing() {
+    new_test_ext().execute_with(|| {
+        set_routing(5, 5);
+        assert_ok!(VitreusDex::create_pool(RuntimeOrigin::root(), usdc(), vnrg(), 3));
+        assert_ok!(VitreusDex::add_liquidity(RuntimeOrigin::signed(ALICE), usdc(), vnrg(), 100_000, 100_000, 0, 0));
+        assert_ok!(VitreusDex::swap_exact_tokens_for_tokens(
+            RuntimeOrigin::signed(BOB),
+            usdc(),
+            vnrg(),
+            10_000,
+            0,
+            BOB,
+        ));
+        assert_eq!(Balances::free_balance(escrow()), 0);
+        assert_eq!(ProtocolFeesUnclaimed::<Test>::get(), 0);
+        assert_eq!(CreatorFeesUnclaimed::<Test>::get(pair()), 0);
+        // The whole 0.3% stayed with the pool, as before D4.
+        assert_eq!(Pools::<Test>::get(pair()).unwrap().total_fees_collected, 10_000 * 3 / 1_000);
+    });
+}
+
+#[test]
+fn d4_claim_pool_creator_fees_pays_only_the_lookup_recipient() {
+    new_test_ext().execute_with(|| {
+        let key = seeded_launch_pool(5, 5);
+        assert_ok!(VitreusDex::swap_exact_tokens_for_tokens(
+            RuntimeOrigin::signed(BOB),
+            native(),
+            launch(),
+            100 * UNIT,
+            0,
+            BOB,
+        ));
+        let accrued = CreatorFeesUnclaimed::<Test>::get(key.clone());
+        assert_eq!(accrued, 100 * UNIT * 5 / 10_000);
+
+        // Not the creator on record.
+        assert_noop!(
+            VitreusDex::claim_pool_creator_fees(RuntimeOrigin::signed(BOB), launch()),
+            Error::<Test>::NotCreatorFeeRecipient
+        );
+        // No creator is known for this asset at all.
+        assert_noop!(
+            VitreusDex::claim_pool_creator_fees(RuntimeOrigin::signed(ALICE), usdc()),
+            Error::<Test>::NoCreatorForAsset
+        );
+
+        let before = Balances::free_balance(CREATOR);
+        assert_ok!(VitreusDex::claim_pool_creator_fees(RuntimeOrigin::signed(CREATOR), launch()));
+        assert_eq!(Balances::free_balance(CREATOR) - before, accrued);
+        assert_eq!(CreatorFeesUnclaimed::<Test>::get(key.clone()), 0);
+        System::assert_has_event(
+            Event::CreatorFeesClaimed { pool: key, recipient: CREATOR, amount: accrued }.into(),
+        );
+        // Protocol share is untouched by a creator claim.
+        assert_eq!(ProtocolFeesUnclaimed::<Test>::get(), 100 * UNIT * 5 / 10_000);
+        assert_eq!(Balances::free_balance(escrow()), ProtocolFeesUnclaimed::<Test>::get());
+
+        assert_noop!(
+            VitreusDex::claim_pool_creator_fees(RuntimeOrigin::signed(CREATOR), launch()),
+            Error::<Test>::ZeroAmount
+        );
+    });
+}
+
+#[test]
+fn d4_withdraw_protocol_fees_is_permissionless_and_follows_the_recipient() {
+    new_test_ext().execute_with(|| {
+        assert_noop!(
+            VitreusDex::withdraw_protocol_fees(RuntimeOrigin::signed(BOB)),
+            Error::<Test>::ZeroAmount
+        );
+        seeded_launch_pool(5, 5);
+        let swap = || {
+            assert_ok!(VitreusDex::swap_exact_tokens_for_tokens(
+                RuntimeOrigin::signed(BOB),
+                native(),
+                launch(),
+                100 * UNIT,
+                0,
+                BOB,
+            ));
+        };
+        let slice = 100 * UNIT * 5 / 10_000;
+
+        // Default recipient is the runtime-bound treasury; anyone may trigger.
+        swap();
+        assert_eq!(VitreusDex::protocol_fee_recipient(), TREASURY);
+        let treasury_before = Balances::free_balance(TREASURY);
+        assert_ok!(VitreusDex::withdraw_protocol_fees(RuntimeOrigin::signed(BOB)));
+        assert_eq!(Balances::free_balance(TREASURY) - treasury_before, slice);
+        assert_eq!(ProtocolFeesUnclaimed::<Test>::get(), 0);
+        System::assert_has_event(Event::ProtocolFeesWithdrawn { recipient: TREASURY, amount: slice }.into());
+
+        // Governance redirects; fees accrued before the change follow it.
+        swap();
+        assert_noop!(
+            VitreusDex::set_protocol_fee_recipient(RuntimeOrigin::signed(ALICE), Some(CHARLIE)),
+            sp_runtime::DispatchError::BadOrigin
+        );
+        assert_ok!(VitreusDex::set_protocol_fee_recipient(RuntimeOrigin::root(), Some(CHARLIE)));
+        assert_eq!(ProtocolFeeRecipient::<Test>::get(), Some(CHARLIE));
+        let charlie_before = Balances::free_balance(CHARLIE);
+        assert_ok!(VitreusDex::withdraw_protocol_fees(RuntimeOrigin::signed(ALICE)));
+        assert_eq!(Balances::free_balance(CHARLIE) - charlie_before, slice);
+
+        // `None` restores the default.
+        assert_ok!(VitreusDex::set_protocol_fee_recipient(RuntimeOrigin::root(), None));
+        assert_eq!(ProtocolFeeRecipient::<Test>::get(), None);
+        assert_eq!(VitreusDex::protocol_fee_recipient(), TREASURY);
+        // Creator accrual is untouched by protocol withdrawals.
+        let key = VitreusDex::canonical_pair(native(), launch());
+        assert_eq!(CreatorFeesUnclaimed::<Test>::get(key), 2 * slice);
+        assert_eq!(Balances::free_balance(escrow()), 2 * slice);
+    });
+}
+
