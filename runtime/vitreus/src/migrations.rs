@@ -10,7 +10,10 @@ pub type Permanent = (
 pub type V0213 =
     (InitTechnicalCommitteeTreasury, pallet_privileges::migration::MigrateToV1<Runtime>);
 
-pub type Unreleased = ();
+/// D4: `PoolInfo` gains a fee-routing snapshot; existing pools get zero
+/// routing (100% of fees stay in the pool), including the launchpad pool that
+/// graduated before D4.
+pub type Unreleased = (pallet_vitreus_dex::migrations::v1::MigrateToV1<Runtime>,);
 
 pub struct InitTechnicalCommitteeTreasury;
 impl frame_support::traits::OnRuntimeUpgrade for InitTechnicalCommitteeTreasury {

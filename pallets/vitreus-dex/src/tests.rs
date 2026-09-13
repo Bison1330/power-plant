@@ -1700,3 +1700,36 @@ fn d4_withdraw_protocol_fees_is_permissionless_and_follows_the_recipient() {
     });
 }
 
+#[test]
+fn d4_migration_v1_gives_existing_pools_zero_routing() {
+    use crate::migrations::v1::{MigrateToV1, OldPoolInfo};
+    use frame_support::traits::{GetStorageVersion, OnRuntimeUpgrade, StorageVersion};
+    use parity_scale_codec::Encode;
+
+    new_test_ext().execute_with(|| {
+        // A pre-D4 pool record written in the old layout, under the old version.
+        let key = VitreusDex::canonical_pair(native(), usdc());
+        let old = OldPoolInfo::<u128, u128> {
+            reserve_a: 5,
+            reserve_b: 7,
+            fee_tier: 3,
+            total_fees_collected: 11,
+            pool_account: VitreusDex::pool_account_for(native(), usdc()),
+        };
+        frame_support::storage::unhashed::put_raw(&Pools::<Test>::hashed_key_for(key.clone()), &old.encode());
+        StorageVersion::new(0).put::<VitreusDex>();
+        // The new layout cannot decode the old record.
+        assert!(Pools::<Test>::get(key.clone()).is_none());
+
+        MigrateToV1::<Test>::on_runtime_upgrade();
+
+        let pool = Pools::<Test>::get(key.clone()).expect("migrated");
+        assert_eq!((pool.reserve_a, pool.reserve_b, pool.fee_tier, pool.total_fees_collected), (5, 7, 3, 11));
+        assert_eq!(pool.routing, FeeRouting::default(), "pre-D4 pools keep 100% of fees in the pool");
+        assert_eq!(VitreusDex::on_chain_storage_version(), StorageVersion::new(1));
+
+        // Idempotent: a second run is a no-op at version 1.
+        MigrateToV1::<Test>::on_runtime_upgrade();
+        assert_eq!(Pools::<Test>::get(key).unwrap().routing, FeeRouting::default());
+    });
+}

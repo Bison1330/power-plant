@@ -256,7 +256,7 @@ pub mod pallet {
     use frame_support::pallet_prelude::*;
     use frame_system::pallet_prelude::*;
 
-    const STORAGE_VERSION: StorageVersion = StorageVersion::new(0);
+    const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
 
     #[pallet::pallet]
     #[pallet::storage_version(STORAGE_VERSION)]
@@ -2558,3 +2558,76 @@ impl<T: Config> OnEnergyBurn<T::Balance> for Pallet<T> {
     }
 }
 
+/// Storage migrations.
+pub mod migrations {
+    use super::*;
+    use frame_support::{
+        migrations::VersionedMigration,
+        traits::{Get, UncheckedOnRuntimeUpgrade},
+        weights::Weight,
+    };
+    use sp_std::marker::PhantomData;
+
+    /// D4 (v0 → v1): `PoolInfo` gains `routing`. Every existing pool gets
+    /// `FeeRouting::default()` — zero — and keeps 100% of its fee in the
+    /// pool. That includes the launchpad pool that graduated before D4
+    /// (DLNCH on the dev chain): it was seeded under the terms in force at
+    /// the time, and changing a live pool's split retroactively is exactly
+    /// the parameter mutation the per-pool snapshot exists to prevent.
+    pub mod v1 {
+        use super::*;
+
+        /// `PoolInfo` as stored before D4.
+        #[derive(Encode, Decode)]
+        #[allow(missing_docs)]
+        pub struct OldPoolInfo<Balance, AccountId> {
+            pub reserve_a: Balance,
+            pub reserve_b: Balance,
+            pub fee_tier: u32,
+            pub total_fees_collected: Balance,
+            pub pool_account: AccountId,
+        }
+
+        /// Unversioned body; wrap in [`MigrateToV1`].
+        pub struct VersionUncheckedMigrateToV1<T>(PhantomData<T>);
+
+        impl<T: Config> UncheckedOnRuntimeUpgrade for VersionUncheckedMigrateToV1<T> {
+            fn on_runtime_upgrade() -> Weight {
+                let mut count = 0u64;
+                Pools::<T>::translate::<OldPoolInfo<T::Balance, T::AccountId>, _>(|_pair, old| {
+                    count = count.saturating_add(1);
+                    Some(PoolInfo {
+                        reserve_a: old.reserve_a,
+                        reserve_b: old.reserve_b,
+                        fee_tier: old.fee_tier,
+                        total_fees_collected: old.total_fees_collected,
+                        pool_account: old.pool_account,
+                        routing: FeeRouting::default(),
+                    })
+                });
+                log::info!(target: "runtime::vitreus-dex", "D4 migration: {count} pools now carry zero fee routing");
+                T::DbWeight::get().reads_writes(count, count)
+            }
+
+            #[cfg(feature = "try-runtime")]
+            fn post_upgrade(_state: sp_std::vec::Vec<u8>) -> Result<(), sp_runtime::TryRuntimeError> {
+                for (_pair, pool) in Pools::<T>::iter() {
+                    frame_support::ensure!(
+                        pool.routing == FeeRouting::default(),
+                        "every pre-D4 pool must carry zero routing"
+                    );
+                }
+                Ok(())
+            }
+        }
+
+        /// D4 migration, gated on the pallet's on-chain storage version.
+        pub type MigrateToV1<T> = VersionedMigration<
+            0,
+            1,
+            VersionUncheckedMigrateToV1<T>,
+            Pallet<T>,
+            <T as frame_system::Config>::DbWeight,
+        >;
+    }
+}
