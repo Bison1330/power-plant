@@ -1219,6 +1219,9 @@ impl pallet_vitreus_dex::Config for Runtime {
     type DefaultBidWindowBlocks = DefaultBidWindowBlocks;
     type DefaultSettlementWindowBlocks = DefaultSettlementWindowBlocks;
     type DefaultSolverBondAmount = DefaultSolverBondAmount;
+    type WeightInfo = pallet_vitreus_dex::weights::SubstrateWeight<Runtime>;
+    #[cfg(feature = "runtime-benchmarks")]
+    type BenchmarkHelper = ();
 }
 
 // ---- pallet-launchpad (testnet-runtime only) --------------------------------
@@ -1290,6 +1293,7 @@ impl pallet_launchpad::Config for Runtime {
     type StringLimit = AssetsStringLimit;
     type DefaultLaunchParams = LaunchpadDefaultParams;
     type BuyHook = ();
+    type WeightInfo = pallet_launchpad::weights::SubstrateWeight<Runtime>;
 }
 
 parameter_types! {
@@ -2406,12 +2410,25 @@ extern crate frame_benchmarking;
 #[cfg(feature = "runtime-benchmarks")]
 impl frame_system_benchmarking::Config for Runtime {}
 
-#[cfg(feature = "runtime-benchmarks")]
+#[cfg(all(feature = "runtime-benchmarks", feature = "testnet-runtime"))]
 mod benches {
     define_benchmarks!(
         [frame_system, SystemBench::<Runtime>]
         [pallet_evm, EVM]
         [pallet_treasury_extension, TreasuryExtension]
+        [pallet_vitreus_dex, VitreusDex]
+        // Only present in the testnet runtime (see the pallet_launchpad::Config block).
+        [pallet_launchpad, Launchpad]
+    );
+}
+
+#[cfg(all(feature = "runtime-benchmarks", not(feature = "testnet-runtime")))]
+mod benches {
+    define_benchmarks!(
+        [frame_system, SystemBench::<Runtime>]
+        [pallet_evm, EVM]
+        [pallet_treasury_extension, TreasuryExtension]
+        [pallet_vitreus_dex, VitreusDex]
     );
 }
 

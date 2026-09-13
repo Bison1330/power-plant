@@ -703,7 +703,7 @@ fn fm09_rounding_always_favours_pool() {
                         _ => vtrs(&who) - ED, // near the balance cap
                     };
                     let quote = Launchpad::quote_buy(id, amt);
-                    let res = Launchpad::buy(origin(&who), id, amt, 0);
+                    let res = Launchpad::buy(origin(&who), id, amt, 0).map(|_| ()).map_err(|e| e.error);
                     match (quote, res) {
                         (Ok(q), Ok(())) => {
                             let s1 = state(id);
@@ -1169,3 +1169,47 @@ fn creator_fee_recipient_is_self_managed() {
 }
 
 type T = Test;
+
+// ---- §6.2 weights ------------------------------------------------------
+
+#[test]
+fn weights_crossing_buy_refunds_when_not_crossing() {
+    use crate::weights::WeightInfo as W;
+    use frame_support::dispatch::GetDispatchInfo;
+    new_test_ext().execute_with(|| {
+        let id = create(ALICE);
+
+        // Pre-dispatch, `buy` is always charged the crossing path.
+        let call: RuntimeCall = crate::Call::<Test>::buy { launch_id: id, quote_in: 1, min_tokens_out: 0 }.into();
+        assert_eq!(call.get_dispatch_info().weight, <() as W>::buy_crossing());
+        assert!(<() as W>::buy_crossing().all_gt(<() as W>::buy()));
+
+        // A buy that leaves tokens on the curve refunds down to `buy()`.
+        let post = Launchpad::buy(origin(BOB), id, 2_000 * UNIT, 0).unwrap();
+        assert_eq!(post.actual_weight, Some(<() as W>::buy()));
+        assert_eq!(state(id).phase, Phase::Trading);
+
+        // A crossing buy keeps the full charge.
+        let post = Launchpad::buy(origin(BOB), id, 500_000_000 * UNIT, 0).unwrap();
+        assert_eq!(post.actual_weight, None);
+        assert_eq!(state(id).phase, Phase::Graduated);
+
+        // `create_launch` with a non-crossing initial buy: charged create + crossing, refunded to create + buy.
+        let call: RuntimeCall = crate::Call::<Test>::create_launch {
+            name: bv(b"Meme"), symbol: bv(b"MEME"), creator_fee_recipient: None,
+            initial_buy: 2_000 * UNIT, min_tokens_out: 0, expected_params_hash: None,
+        }.into();
+        assert_eq!(call.get_dispatch_info().weight, <() as W>::create_launch(4, 4).saturating_add(<() as W>::buy_crossing()));
+        let post = Launchpad::create_launch(origin(CHARLIE), bv(b"Meme"), bv(b"MEME"), None, 2_000 * UNIT, 0, None).unwrap();
+        assert_eq!(post.actual_weight, Some(<() as W>::create_launch(4, 4).saturating_add(<() as W>::buy())));
+
+        // Without an initial buy nothing extra is charged and nothing is refunded.
+        let call: RuntimeCall = crate::Call::<Test>::create_launch {
+            name: bv(b"Meme"), symbol: bv(b"MEME"), creator_fee_recipient: None,
+            initial_buy: 0, min_tokens_out: 0, expected_params_hash: None,
+        }.into();
+        assert_eq!(call.get_dispatch_info().weight, <() as W>::create_launch(4, 4));
+        let post = Launchpad::create_launch(origin(CHARLIE), bv(b"Meme"), bv(b"MEME"), None, 0, 0, None).unwrap();
+        assert_eq!(post.actual_weight, None);
+    });
+}

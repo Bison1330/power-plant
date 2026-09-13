@@ -19,6 +19,11 @@
 pub use pallet::*;
 
 pub mod curve;
+pub mod weights;
+#[cfg(feature = "runtime-benchmarks")]
+mod benchmarking;
+
+pub use weights::WeightInfo;
 
 #[cfg(test)]
 mod mock;
@@ -239,6 +244,9 @@ pub mod pallet {
 
         /// Anti-snipe hook; `()` in v1.
         type BuyHook: OnCurveBuy<Self::AccountId, BalanceOf<Self>, BlockNumberFor<Self>>;
+
+        /// Weight information for the extrinsics of this pallet.
+        type WeightInfo: WeightInfo;
     }
 
     // ---- storage (§1) ----------------------------------------------------
@@ -326,7 +334,10 @@ pub mod pallet {
     impl<T: Config> Pallet<T> {
         /// §2.1
         #[pallet::call_index(0)]
-        #[pallet::weight(Weight::from_parts(600_000_000, 40_000))]
+        #[pallet::weight({
+            let w = <T as Config>::WeightInfo::create_launch(name.len() as u32, symbol.len() as u32);
+            if initial_buy.is_zero() { w } else { w.saturating_add(<T as Config>::WeightInfo::buy_crossing()) }
+        })]
         pub fn create_launch(
             origin: OriginFor<T>,
             name: BoundedVec<u8, T::StringLimit>,
@@ -335,7 +346,7 @@ pub mod pallet {
             initial_buy: BalanceOf<T>,
             min_tokens_out: BalanceOf<T>,
             expected_params_hash: Option<T::Hash>,
-        ) -> DispatchResult {
+        ) -> DispatchResultWithPostInfo {
             let creator = ensure_signed(origin)?;
             ensure!(!CreationPaused::<T>::get(), Error::<T>::CreationPaused);
             ensure!(!name.is_empty() && !symbol.is_empty(), Error::<T>::InvalidMetadata);
@@ -409,30 +420,39 @@ pub mod pallet {
             NextLaunchId::<T>::put(id.checked_add(1).ok_or(Error::<T>::ArithmeticOverflow)?);
             Self::deposit_event(Event::LaunchCreated { id, asset_id, creator: creator.clone(), params_hash });
 
-            // 8. optional atomic first buy
+            // 8. optional atomic first buy. Charged as a crossing buy up front;
+            // refunded to a plain buy when the curve was not exhausted.
             if !initial_buy.is_zero() {
-                Self::do_buy(&creator, id, initial_buy, min_tokens_out, true)?;
+                let crossed = Self::do_buy(&creator, id, initial_buy, min_tokens_out, true)?;
+                if !crossed {
+                    let w = <T as Config>::WeightInfo::create_launch(name.len() as u32, symbol.len() as u32)
+                        .saturating_add(<T as Config>::WeightInfo::buy());
+                    return Ok(Some(w).into());
+                }
             }
-            Ok(())
+            Ok(().into())
         }
 
-        /// §2.2
+        /// §2.2. Whether the buy crosses is state-dependent, so the crossing
+        /// weight (partial fill + pool creation + seed + lock) is charged up
+        /// front and refunded to `buy()` when the curve was not exhausted.
         #[pallet::call_index(1)]
-        #[pallet::weight(Weight::from_parts(400_000_000, 30_000))]
+        #[pallet::weight(<T as Config>::WeightInfo::buy_crossing())]
         pub fn buy(
             origin: OriginFor<T>,
             launch_id: LaunchId,
             quote_in: BalanceOf<T>,
             min_tokens_out: BalanceOf<T>,
-        ) -> DispatchResult {
+        ) -> DispatchResultWithPostInfo {
             let who = ensure_signed(origin)?;
             let launch = Launches::<T>::get(launch_id).ok_or(Error::<T>::LaunchNotFound)?;
-            Self::do_buy(&who, launch_id, quote_in, min_tokens_out, who == launch.creator)
+            let crossed = Self::do_buy(&who, launch_id, quote_in, min_tokens_out, who == launch.creator)?;
+            Ok(if crossed { None } else { Some(<T as Config>::WeightInfo::buy()) }.into())
         }
 
         /// §2.3
         #[pallet::call_index(2)]
-        #[pallet::weight(Weight::from_parts(300_000_000, 20_000))]
+        #[pallet::weight(<T as Config>::WeightInfo::sell())]
         pub fn sell(
             origin: OriginFor<T>,
             launch_id: LaunchId,
@@ -446,7 +466,7 @@ pub mod pallet {
         /// §2.4 — permissionless retry of seeding. Not nested: a failure is
         /// the extrinsic's error, visible to the caller.
         #[pallet::call_index(3)]
-        #[pallet::weight(Weight::from_parts(500_000_000, 30_000))]
+        #[pallet::weight(<T as Config>::WeightInfo::graduate())]
         pub fn graduate(origin: OriginFor<T>, launch_id: LaunchId) -> DispatchResult {
             let _ = ensure_signed(origin)?;
             Self::do_seed(launch_id)
@@ -454,7 +474,7 @@ pub mod pallet {
 
         /// §2.5
         #[pallet::call_index(4)]
-        #[pallet::weight(Weight::from_parts(150_000_000, 10_000))]
+        #[pallet::weight(<T as Config>::WeightInfo::claim_creator_fees())]
         pub fn claim_creator_fees(origin: OriginFor<T>, launch_id: LaunchId) -> DispatchResult {
             let who = ensure_signed(origin)?;
             let launch = Launches::<T>::get(launch_id).ok_or(Error::<T>::LaunchNotFound)?;
@@ -473,7 +493,7 @@ pub mod pallet {
 
         /// §2.6 — only the current recipient; no governance override.
         #[pallet::call_index(5)]
-        #[pallet::weight(Weight::from_parts(100_000_000, 10_000))]
+        #[pallet::weight(<T as Config>::WeightInfo::set_creator_fee_recipient())]
         pub fn set_creator_fee_recipient(
             origin: OriginFor<T>,
             launch_id: LaunchId,
@@ -491,7 +511,7 @@ pub mod pallet {
 
         /// §2.8 — affects launches created afterwards only (FM-10).
         #[pallet::call_index(6)]
-        #[pallet::weight(Weight::from_parts(50_000_000, 5_000))]
+        #[pallet::weight(<T as Config>::WeightInfo::set_params())]
         pub fn set_params(origin: OriginFor<T>, new: LaunchParams<BalanceOf<T>>) -> DispatchResult {
             T::LaunchManageOrigin::ensure_origin(origin)?;
             Self::validate_params(&new)?;
@@ -502,7 +522,7 @@ pub mod pallet {
 
         /// §2.8
         #[pallet::call_index(7)]
-        #[pallet::weight(Weight::from_parts(30_000_000, 3_000))]
+        #[pallet::weight(<T as Config>::WeightInfo::set_creation_paused())]
         pub fn set_creation_paused(origin: OriginFor<T>, paused: bool) -> DispatchResult {
             T::LaunchManageOrigin::ensure_origin(origin)?;
             CreationPaused::<T>::put(paused);
@@ -518,7 +538,7 @@ pub mod pallet {
         /// position forever, sweeps the unused remainder to the treasury.
         /// The only fund movement is escrow → pool / treasury (FM-03).
         #[pallet::call_index(8)]
-        #[pallet::weight(Weight::from_parts(600_000_000, 40_000))]
+        #[pallet::weight(<T as Config>::WeightInfo::force_seed_into_existing_pool())]
         pub fn force_seed_into_existing_pool(
             origin: OriginFor<T>,
             launch_id: LaunchId,
@@ -688,14 +708,15 @@ pub mod pallet {
             (protocol, fee - protocol)
         }
 
-        /// §2.2 body. Single choke point for every buy.
+        /// §2.2 body. Single choke point for every buy. Returns whether the
+        /// buy exhausted the curve (and therefore attempted the seed).
         pub fn do_buy(
             who: &T::AccountId,
             launch_id: LaunchId,
             quote_in: BalanceOf<T>,
             min_tokens_out: BalanceOf<T>,
             is_creator: bool,
-        ) -> DispatchResult {
+        ) -> Result<bool, DispatchError> {
             let launch = Launches::<T>::get(launch_id).ok_or(Error::<T>::LaunchNotFound)?;
             let mut state = Curves::<T>::get(launch_id).ok_or(Error::<T>::LaunchNotFound)?;
             ensure!(state.phase == Phase::Trading, Error::<T>::WrongPhase);
@@ -759,7 +780,7 @@ pub mod pallet {
                     Self::deposit_event(Event::GraduationDeferred { launch_id, error });
                 }
             }
-            Ok(())
+            Ok(crossed)
         }
 
         /// §2.3 body.

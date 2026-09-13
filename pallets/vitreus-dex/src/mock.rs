@@ -112,6 +112,9 @@ impl Config for Test {
     type DefaultBidWindowBlocks = ConstU64<10>;
     type DefaultSettlementWindowBlocks = ConstU64<5>;
     type DefaultSolverBondAmount = ConstU128<1_000_000_000_000>;
+    type WeightInfo = ();
+    #[cfg(feature = "runtime-benchmarks")]
+    type BenchmarkHelper = ();
 }
 
 pub(crate) fn new_test_ext() -> sp_io::TestExternalities {

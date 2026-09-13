@@ -96,7 +96,19 @@ impl pallet_assets::Config for Test {
     type WeightInfo = ();
     type CallbackHandle = ();
     pallet_assets::runtime_benchmarks_enabled! {
-        type BenchmarkHelper = ();
+        type BenchmarkHelper = AssetsBenchmarkHelper;
+    }
+}
+
+// `()` only builds `Compact<u32>`; this mock keeps the production `u128` ids.
+// Only compiled when `pallet-assets/runtime-benchmarks` is on (feature
+// unification can switch it on from a sibling crate in the same `cargo test`).
+pallet_assets::runtime_benchmarks_enabled! {
+    pub struct AssetsBenchmarkHelper;
+    impl pallet_assets::BenchmarkHelper<parity_scale_codec::Compact<u128>> for AssetsBenchmarkHelper {
+        fn create_asset_id_parameter(id: u32) -> parity_scale_codec::Compact<u128> {
+            parity_scale_codec::Compact(id.into())
+        }
     }
 }
 
@@ -137,6 +149,9 @@ impl pallet_vitreus_dex::Config for Test {
     type DefaultBidWindowBlocks = ConstU64<10>;
     type DefaultSettlementWindowBlocks = ConstU64<5>;
     type DefaultSolverBondAmount = ConstU128<1_000_000_000_000>;
+    type WeightInfo = ();
+    #[cfg(feature = "runtime-benchmarks")]
+    type BenchmarkHelper = ();
 }
 
 impl pallet_utility::Config for Test {
@@ -268,6 +283,7 @@ impl pallet_launchpad::Config for Test {
     type StringLimit = ConstU32<50>;
     type DefaultLaunchParams = DefaultLaunchParams;
     type BuyHook = RecordingHook;
+    type WeightInfo = ();
 }
 
 /// 10^9 VTRS each for the actors; enough to cross any in-bounds curve.

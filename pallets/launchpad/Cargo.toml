@@ -13,6 +13,7 @@ log = { workspace = true }
 parity-scale-codec = { workspace = true, default-features = false }
 frame-support = { workspace = true, default-features = false }
 frame-system = { workspace = true, default-features = false }
+frame-benchmarking = { workspace = true, default-features = false, optional = true }
 scale-info = { workspace = true, default-features = false, features = ["derive"] }
 sp-core = { workspace = true, default-features = false }
 sp-io = { workspace = true, default-features = false }
@@ -32,6 +33,7 @@ primitive-types = { workspace = true, default-features = false, features = ["cod
 default = ["std"]
 std = [
     "parity-scale-codec/std",
+    "frame-benchmarking?/std",
     "frame-support/std",
     "frame-system/std",
     "log/std",
@@ -43,9 +45,11 @@ std = [
     "pallet-vitreus-dex/std",
 ]
 runtime-benchmarks = [
+    "frame-benchmarking/runtime-benchmarks",
     "frame-support/runtime-benchmarks",
     "frame-system/runtime-benchmarks",
     "sp-runtime/runtime-benchmarks",
+    "pallet-vitreus-dex/runtime-benchmarks",
 ]
 try-runtime = [
     "frame-support/try-runtime",

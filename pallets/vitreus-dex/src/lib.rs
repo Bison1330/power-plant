@@ -44,6 +44,13 @@ mod tests;
 mod settlement_integration_tests;
 
 pub mod settlement;
+pub mod weights;
+#[cfg(feature = "runtime-benchmarks")]
+pub mod benchmarking;
+
+pub use weights::WeightInfo;
+#[cfg(feature = "runtime-benchmarks")]
+pub use benchmarking::BenchmarkHelper;
 
 pub use pallet::*;
 
@@ -272,6 +279,13 @@ pub mod pallet {
         /// 10^-6 VTRS in production denominations.
         #[pallet::constant]
         type DefaultSolverBondAmount: Get<Self::Balance>;
+
+        /// Weight information for the extrinsics of this pallet.
+        type WeightInfo: WeightInfo;
+
+        /// Supplies non-native asset identifiers for benchmarks.
+        #[cfg(feature = "runtime-benchmarks")]
+        type BenchmarkHelper: BenchmarkHelper<Self::AssetKind>;
     }
 
     /// All known pools keyed by their canonical ordered asset pair.
@@ -711,7 +725,7 @@ pub mod pallet {
     impl<T: Config> Pallet<T> {
         /// Create a new AMM pool for the given asset pair and fee tier.
         #[pallet::call_index(0)]
-        #[pallet::weight(Weight::from_parts(100_000_000, 10_000))]
+        #[pallet::weight(<T as Config>::WeightInfo::create_pool())]
         pub fn create_pool(
             origin: OriginFor<T>,
             asset_a: T::AssetKind,
@@ -724,7 +738,7 @@ pub mod pallet {
 
         /// Add liquidity to an existing pool.
         #[pallet::call_index(1)]
-        #[pallet::weight(Weight::from_parts(200_000_000, 20_000))]
+        #[pallet::weight(<T as Config>::WeightInfo::add_liquidity())]
         pub fn add_liquidity(
             origin: OriginFor<T>,
             asset_a: T::AssetKind,
@@ -749,7 +763,7 @@ pub mod pallet {
 
         /// Remove liquidity from an existing pool.
         #[pallet::call_index(2)]
-        #[pallet::weight(Weight::from_parts(200_000_000, 20_000))]
+        #[pallet::weight(<T as Config>::WeightInfo::remove_liquidity())]
         pub fn remove_liquidity(
             origin: OriginFor<T>,
             asset_a: T::AssetKind,
@@ -842,7 +856,7 @@ pub mod pallet {
 
         /// Swap an exact amount of `asset_in` for as much `asset_out` as the pool yields.
         #[pallet::call_index(3)]
-        #[pallet::weight(Weight::from_parts(200_000_000, 20_000))]
+        #[pallet::weight(<T as Config>::WeightInfo::swap_exact_tokens_for_tokens())]
         pub fn swap_exact_tokens_for_tokens(
             origin: OriginFor<T>,
             asset_in: T::AssetKind,
@@ -862,7 +876,7 @@ pub mod pallet {
         ///
         /// Finding 10: activates the previously dead `locked_until` field.
         #[pallet::call_index(4)]
-        #[pallet::weight(Weight::from_parts(50_000_000, 5_000))]
+        #[pallet::weight(<T as Config>::WeightInfo::lock_liquidity())]
         pub fn lock_liquidity(
             origin: OriginFor<T>,
             asset_a: T::AssetKind,
@@ -878,7 +892,7 @@ pub mod pallet {
         /// Register as a solver. Transfers the required bond from the caller
         /// to a per-solver escrow sub-account derived from the assigned id.
         #[pallet::call_index(5)]
-        #[pallet::weight(Weight::from_parts(150_000_000, 15_000))]
+        #[pallet::weight(<T as Config>::WeightInfo::register_solver())]
         pub fn register_solver(origin: OriginFor<T>) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
@@ -937,7 +951,7 @@ pub mod pallet {
         /// Voluntarily deregister as a solver. Refunds the full bond.
         /// Fails if the solver has any active (committed but unsettled) fills.
         #[pallet::call_index(6)]
-        #[pallet::weight(Weight::from_parts(100_000_000, 10_000))]
+        #[pallet::weight(<T as Config>::WeightInfo::deregister_solver())]
         pub fn deregister_solver(origin: OriginFor<T>) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
@@ -984,7 +998,7 @@ pub mod pallet {
         /// shared intent escrow account. Solvers may bid during the next
         /// `current_bid_window()` blocks.
         #[pallet::call_index(7)]
-        #[pallet::weight(Weight::from_parts(200_000_000, 20_000))]
+        #[pallet::weight(<T as Config>::WeightInfo::submit_intent())]
         pub fn submit_intent(
             origin: OriginFor<T>,
             token_in: T::AssetKind,
@@ -1046,7 +1060,7 @@ pub mod pallet {
         /// `amount_in` of `token_in`. Only succeeds while the intent is
         /// still `Open` (no solver has committed).
         #[pallet::call_index(8)]
-        #[pallet::weight(Weight::from_parts(150_000_000, 15_000))]
+        #[pallet::weight(<T as Config>::WeightInfo::cancel_intent())]
         pub fn cancel_intent(origin: OriginFor<T>, intent_id: u64) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
@@ -1099,7 +1113,7 @@ pub mod pallet {
         /// per-solver escrow regardless of commitment state; slashing on
         /// failed settlement draws against it.
         #[pallet::call_index(9)]
-        #[pallet::weight(Weight::from_parts(200_000_000, 20_000))]
+        #[pallet::weight(<T as Config>::WeightInfo::commit_fill())]
         pub fn commit_fill(
             origin: OriginFor<T>,
             intent_id: u64,
@@ -1186,7 +1200,7 @@ pub mod pallet {
         /// On success: user gets exactly `committed_amount_out`, treasury
         /// gets the protocol fee share of profit, solver pockets the rest.
         #[pallet::call_index(10)]
-        #[pallet::weight(Weight::from_parts(300_000_000, 30_000))]
+        #[pallet::weight(<T as Config>::WeightInfo::settle_intent())]
         pub fn settle_intent(origin: OriginFor<T>, intent_id: u64) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
@@ -1301,7 +1315,7 @@ pub mod pallet {
         /// After slashing, the solver is marked inactive and must re-register
         /// with a fresh bond to participate again.
         #[pallet::call_index(11)]
-        #[pallet::weight(Weight::from_parts(250_000_000, 25_000))]
+        #[pallet::weight(<T as Config>::WeightInfo::slash_solver())]
         pub fn slash_solver(origin: OriginFor<T>, intent_id: u64) -> DispatchResult {
             let slasher = ensure_signed(origin)?;
 
@@ -1411,7 +1425,7 @@ pub mod pallet {
         /// while the intent is still `Open`. Intents that were committed but
         /// not settled go through `slash_solver` instead.
         #[pallet::call_index(12)]
-        #[pallet::weight(Weight::from_parts(150_000_000, 15_000))]
+        #[pallet::weight(<T as Config>::WeightInfo::refund_expired_intent())]
         pub fn refund_expired_intent(
             origin: OriginFor<T>,
             intent_id: u64,
@@ -1460,7 +1474,7 @@ pub mod pallet {
 
         /// Update the bid window (in blocks). Gated on `ManageOrigin`.
         #[pallet::call_index(13)]
-        #[pallet::weight(Weight::from_parts(50_000_000, 5_000))]
+        #[pallet::weight(<T as Config>::WeightInfo::set_bid_window())]
         pub fn set_bid_window(
             origin: OriginFor<T>,
             new_value: BlockNumberFor<T>,
@@ -1474,7 +1488,7 @@ pub mod pallet {
 
         /// Update the settlement window (in blocks). Gated on `ManageOrigin`.
         #[pallet::call_index(14)]
-        #[pallet::weight(Weight::from_parts(50_000_000, 5_000))]
+        #[pallet::weight(<T as Config>::WeightInfo::set_settlement_window())]
         pub fn set_settlement_window(
             origin: OriginFor<T>,
             new_value: BlockNumberFor<T>,
@@ -1490,7 +1504,7 @@ pub mod pallet {
         /// Does not retroactively affect solvers already bonded at the prior
         /// amount; only applies to new registrations.
         #[pallet::call_index(15)]
-        #[pallet::weight(Weight::from_parts(50_000_000, 5_000))]
+        #[pallet::weight(<T as Config>::WeightInfo::set_solver_bond_amount())]
         pub fn set_solver_bond_amount(
             origin: OriginFor<T>,
             new_value: T::Balance,
