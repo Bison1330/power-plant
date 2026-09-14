@@ -28,18 +28,23 @@ const fmt = (v, d = 18n) => { const b = BigInt(v.toString()); const w = b / 10n 
 /** Sign, submit, wait for finalization; return {hash, block, events} or throw on dispatch error. */
 async function send(label, tx, signer) {
   return new Promise((resolve, reject) => {
+    let done = false;
     tx.signAndSend(signer, { nonce: -1 }, (r) => {
-      if (r.status.isInBlock) {
+      // Resolve on whichever inclusion status arrives first: a node (or a
+      // chopsticks fork) can deliver Finalized without a preceding InBlock.
+      if (!done && (r.status.isInBlock || r.status.isFinalized)) {
+        done = true;
+        const blockHash = r.status.isInBlock ? r.status.asInBlock : r.status.asFinalized;
         const evs = r.events.map((e) => ({ section: e.event.section, method: e.event.method, data: e.event.data.toHuman() }));
         const failed = evs.find((e) => e.section === 'system' && e.method === 'ExtrinsicFailed');
         if (failed || r.dispatchError) {
           const de = r.dispatchError;
           const msg = de?.isModule ? (() => { const m = api.registry.findMetaError(de.asModule); return `${m.section}.${m.name}: ${m.docs.join(' ')}`; })() : de?.toString();
-          reject(new Error(`${label} failed in ${r.status.asInBlock.toHex()}: ${msg}`));
+          reject(new Error(`${label} failed in ${blockHash.toHex()}: ${msg}`));
         }
-        log(`  ${label}: tx ${r.txHash.toHex()} in block ${r.status.asInBlock.toHex()}`);
+        log(`  ${label}: tx ${r.txHash.toHex()} in block ${blockHash.toHex()}`);
         for (const e of evs) if (!['system', 'transactionPayment', 'energyFee', 'balances'].includes(e.section) || e.method === 'ExtrinsicFailed') log(`    event ${e.section}.${e.method} ${JSON.stringify(e.data)}`);
-        resolve({ hash: r.txHash.toHex(), block: r.status.asInBlock.toHex(), events: evs });
+        resolve({ hash: r.txHash.toHex(), block: blockHash.toHex(), events: evs });
       }
       if (r.isError) reject(new Error(`${label}: ${r.status.type}`));
     }).catch(reject);

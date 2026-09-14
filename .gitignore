@@ -16,3 +16,4 @@ testnet_keys_envs
 .direnv
 # symlink to a checkout that has @polkadot/api, for scripts/*.mjs
 scripts/node_modules
+dev-ops/preflight/node_modules

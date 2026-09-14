@@ -1,0 +1,38 @@
+# Fork the live testnet at its head with OUR runtime as a wasm override, so the
+# whole pre-flight runs against real testnet state without touching testnet.
+#   npx @acala-network/chopsticks@1.5.1 --config dev-ops/preflight/chopsticks-testnet.yml
+endpoint: wss://rpc.testnet.compliq.io:9945
+port: 8000
+block: null                      # head at start
+build-block-mode: Instant        # a block per extrinsic, as the scripts expect
+wasm-override: /root/power-plant/runtime-219.wasm
+db: /tmp/chopsticks-testnet.sqlite
+import-storage:
+  # Well-known dev keys the e2e scripts sign with. On testnet they hold nothing;
+  # give them VTRS for the crossing buy and VNRG (asset 0) for fees.
+  System:
+    Account:
+      - - - "0xf24FF3a9CF04c71Dbc94D0b566f7A27B94566cac"   # Alith
+        - providers: 1
+          sufficients: 1
+          data:
+            free: "2000000000000000000000000"           # 2,000,000 VTRS
+      - - - "0x3Cd0A705a2DC65e5b1E1205896BaA2be8A07c6e0"   # Baltathar
+        - providers: 1
+          sufficients: 1
+          data:
+            free: "2000000000000000000000000"
+  Assets:
+    Account:
+      - - - 0                                            # VNRG
+          - "0xf24FF3a9CF04c71Dbc94D0b566f7A27B94566cac"
+        - balance: "1000000000000000000000"              # 1,000 VNRG
+          status: Liquid
+          reason: { Sufficient: null }
+          extra: null
+      - - - 0
+          - "0x3Cd0A705a2DC65e5b1E1205896BaA2be8A07c6e0"
+        - balance: "1000000000000000000000"
+          status: Liquid
+          reason: { Sufficient: null }
+          extra: null
