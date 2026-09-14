@@ -6,7 +6,7 @@ they ran on. See `pallets/BENCHMARKING.md` for the procedure.
 
 | Date | Commit | Box | Machine score | Files |
 |---|---|---|---|---|
-| 2026-09-14 | `426699a` (+ `ec6062a`, `7158265`) | DigitalOcean c-16, 16 dedicated vCPU, 32 GB, Regular Intel (Xeon Platinum 8280 @ 2.70 GHz), NYC1 | **4/5** — CPU and disk pass (BLAKE2-256 143 %, SR25519 113 %, seq write 105 %, rnd write 108 %); **Memory Copy 39.8 %** (4.58 GiB/s vs 11.49 required) | `2026-09-14-{machine.txt,vitreus-dex.json,launchpad.json}` |
+| 2026-09-14 | `0d8c5a3` (+ `d1e091c`, `4f9a0d6`) | DigitalOcean c-16, 16 dedicated vCPU, 32 GB, Regular Intel (Xeon Platinum 8280 @ 2.70 GHz), NYC1 | **4/5** — CPU and disk pass (BLAKE2-256 143 %, SR25519 113 %, seq write 105 %, rnd write 108 %); **Memory Copy 39.8 %** (4.58 GiB/s vs 11.49 required) | `2026-09-14-{machine.txt,vitreus-dex.json,launchpad.json}` |
 
 The memory-bandwidth miss means these weights are conservative on
 storage-heavy calls (they err safe) and must be re-measured on hardware

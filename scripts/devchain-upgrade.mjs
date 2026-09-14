@@ -7,7 +7,7 @@
 //
 // Refuses to downgrade or re-apply the same spec. After the upgrade it
 // reconnects and reports spec_version, the DEX storage version, and whether
-// the metadata still carries the storage items removed in b0621d6.
+// the metadata still carries the storage items removed in ad11e1b.
 import { readFileSync } from 'node:fs';
 import { ApiPromise, WsProvider } from '@polkadot/api';
 import { Keyring } from '@polkadot/keyring';

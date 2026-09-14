@@ -2,7 +2,7 @@
 
 Runtime under test: `runtime-219.wasm` (spec_version 219 on our numbering:
 D6 + measured weights + hook drop + pallets 43/57), built from
-`feature/solver-marketplace` at `f3e55b2`. Live testnet at the time:
+`feature/solver-marketplace` at `93f4a3a`. Live testnet at the time:
 spec 213, head 12,799,822, `LastRuntimeUpgrade {213}`, sudo key
 `0x2F8CF06C0c21CA40eC4006d35C01B92a63d15d66`. Nothing was sent to testnet.
 
