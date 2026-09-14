@@ -58,9 +58,15 @@ Block-by-block, 12,799,857 → 12,799,888, **zero `ExtrinsicFailed`**:
   ran under our runtime alongside the creator claim.
 - 881–882 — swaps from the site (`e2e-swap.mjs` through `/swap`): quote =
   chain formula, on-chain delta exact, `assetOut WithId(2^64+5)`.
-- 883–888 — `add_liquidity` / `remove_liquidity` from the site's pool page
-  (`e2e-liquidity.mjs`): positions open unlocked beside the escrow's
-  permanent lock; D6 holds (recorded == held after each add).
+- 883 onward — `add_liquidity` / `remove_liquidity` from the site's pool
+  page (`e2e-liquidity.mjs`): deposit shares exact
+  (2,538,828,809,273,750,447,397), position opens with `locked_until` None
+  beside the escrow's permanent lock, recorded == held after the add (D6),
+  50 % withdrawal returns the quoted amounts. The first two attempts
+  exposed a site bug the fork surfaces and the dev node hides: the panels'
+  outcome readers only read events at InBlock, and the fork delivers
+  Finalized-first — fixed in the frontend (a64e967) and re-run green here
+  and on the dev node.
 
 Pallet-level diff live → fork: added `VitreusDex@43`, `Launchpad@57`;
 removed none; **changed none** across the other 74 pallets' calls and
