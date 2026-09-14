@@ -1,0 +1,196 @@
+[2026-09-14T14:54:45Z INFO  remote-ext] since no at is provided, setting it to latest finalized head, 0x8823faf699e06075f0b39a4f6d70929a675d4ce10b9f8977b083a93fcfefaf88
+[2026-09-14T14:54:45Z INFO  remote-ext] since no prefix is filtered, the data for all pallets will be downloaded
+[2026-09-14T14:54:45Z INFO  remote-ext] scraping key-pairs from remote at block height 0x8823faf699e06075f0b39a4f6d70929a675d4ce10b9f8977b083a93fcfefaf88
+⏳ Scraping keys...
+[2026-09-14T14:54:45Z INFO  remote-ext] 🔧 Initialized work queue with 16 ranges
+[2026-09-14T14:54:45Z INFO  remote-ext] 🌐 Using 1 RPC provider(s)
+[2026-09-14T14:54:45Z INFO  remote-ext] 🚀 Spawning 4 parallel workers for key fetching
+[2026-09-14T14:54:46Z INFO  remote-ext] 📊 Scraped 10833 keys so far...
+[2026-09-14T14:54:46Z INFO  remote-ext] 🎉 Parallel key fetching complete: 10959 unique keys
+✅ Found 10959 keys in 1.80s
+[2026-09-14T14:54:46Z INFO  remote-ext] 🔧 Initialized 11 batches for value fetching
+[2026-09-14T14:54:46Z INFO  remote-ext] 🚀 Spawning 4 parallel workers for value fetching
+
+⏳ Inserting keys into DB...
+✅ Inserted keys into DB in 0.20s
+[2026-09-14T14:55:49Z INFO  remote-ext] adding data for hashed prefix: , took 64.14s
+[2026-09-14T14:55:49Z INFO  remote-ext] adding data for hashed key: 3a636f6465
+[2026-09-14T14:55:49Z INFO  remote-ext] adding data for hashed key: 26aa394eea5630e07c48ae0c9558cef7f9cce9c888469bb1a0dceaa129672ef8
+[2026-09-14T14:55:49Z INFO  remote-ext] adding data for hashed key: 26aa394eea5630e07c48ae0c9558cef702a5c1b19ab7a04f536c519aca4983ac
+[2026-09-14T14:55:49Z INFO  remote-ext] 👩‍👦 no child roots found to scrape
+[2026-09-14T14:55:49Z INFO  remote-ext] initialized state externalities with storage root 0xef07f61094b8d4289842978c96288b2973ea42fb680e2ad940ddd035f8e22018 and state_version V1
+[2026-09-14T14:55:50Z INFO  try-runtime::cli] Original runtime [Name: "vitreus-power-plant"] [Version: 213] [Code hash: 0xd28a...e405]
+[2026-09-14T14:55:51Z INFO  try-runtime::cli] New runtime      [Name: "vitreus-power-plant"] [Version: 219] [Code hash: 0xc027...0ebd]
+[2026-09-14T14:55:53Z INFO  try-runtime::cli] ------------------------------------------------------------
+    
+    
+[2026-09-14T14:55:53Z INFO  try-runtime::cli] 🔬 Running TryRuntime_on_runtime_upgrade with checks: None
+    
+    
+[2026-09-14T14:55:53Z INFO  try-runtime::cli] ------------------------------------------------------------
+    
+    
+[2026-09-14T14:56:30Z INFO  vitreus_power_plant_runtime] try-runtime::on_runtime_upgrade
+[2026-09-14T14:56:30Z INFO  runtime::frame-support] 🐥 New pallet "VitreusDex" detected in the runtime. Initializing the on-chain storage version to match the storage version defined in the pallet: StorageVersion(1)
+[2026-09-14T14:56:30Z INFO  runtime::frame-support] 🐥 New pallet "Launchpad" detected in the runtime. Initializing the on-chain storage version to match the storage version defined in the pallet: StorageVersion(0)
+[2026-09-14T14:56:30Z WARN  frame_support::migrations] 🚚 Pallet "VitreusDex" VersionedMigration migration 0->1 can be removed; on-chain is already at StorageVersion(1).
+[2026-09-14T14:56:30Z WARN  frame_support::migrations] 🚚 Pallet "Privileges" VersionedMigration migration 0->1 can be removed; on-chain is already at StorageVersion(1).
+[2026-09-14T14:56:30Z INFO  runtime::staking] [12800165] 💸 Fixed 0 out of 39 cooperators
+[2026-09-14T14:56:30Z INFO  runtime::frame-support] ⚠️ Ethereum declares internal migrations (which *might* execute). On-chain `StorageVersion(0)` vs in-code storage version `NoStorageVersionSet`
+[2026-09-14T14:56:30Z INFO  try-runtime::cli] --------------------------------------------------------------------------
+    
+    
+[2026-09-14T14:56:30Z INFO  try-runtime::cli] 🔬 Running TryRuntime_on_runtime_upgrade again to check idempotency: All
+    
+    
+[2026-09-14T14:56:30Z INFO  try-runtime::cli] --------------------------------------------------------------------------
+    
+    
+[2026-09-14T14:57:06Z INFO  vitreus_power_plant_runtime] try-runtime::on_runtime_upgrade
+[2026-09-14T14:57:06Z WARN  frame_support::migrations] 🚚 Pallet "VitreusDex" VersionedMigration migration 0->1 can be removed; on-chain is already at StorageVersion(1).
+[2026-09-14T14:57:06Z WARN  frame_support::migrations] 🚚 Pallet "Privileges" VersionedMigration migration 0->1 can be removed; on-chain is already at StorageVersion(1).
+[2026-09-14T14:57:06Z INFO  runtime::staking] [12800165] 💸 Fixed 0 out of 39 cooperators
+[2026-09-14T14:57:06Z INFO  runtime::frame-support] ⚠️ Ethereum declares internal migrations (which *might* execute). On-chain `StorageVersion(0)` vs in-code storage version `NoStorageVersionSet`
+[2026-09-14T14:57:06Z INFO  try_runtime_core::commands::on_runtime_upgrade] Storage root before: 0x7c62a1aa9a9b9dfcaba39bc23f9259863ee11b9e2f1d89328ddcf495e7537501, after: 0x7c62a1aa9a9b9dfcaba39bc23f9259863ee11b9e2f1d89328ddcf495e7537501
+[2026-09-14T14:57:06Z INFO  try_runtime_core::commands::on_runtime_upgrade] ✅ Migrations are idempotent
+[2026-09-14T14:57:07Z INFO  try-runtime::cli] ---------------------------------------------------------------------------------------
+    
+    
+[2026-09-14T14:57:07Z INFO  try-runtime::cli] 🔬 TryRuntime_on_runtime_upgrade succeeded! Running it again for weight measurements.
+    
+    
+[2026-09-14T14:57:07Z INFO  try-runtime::cli] ---------------------------------------------------------------------------------------
+    
+    
+[2026-09-14T14:57:45Z INFO  try-runtime::cli] PoV size (zstd-compressed compact proof): 20.9 KiB. For parachains, it's your responsibility to verify that a PoV of this size fits within any relaychain constraints.
+[2026-09-14T14:57:45Z INFO  try-runtime::cli] Consumed ref_time: 0.004325s (0.22% of max 2s)
+[2026-09-14T14:57:45Z INFO  try-runtime::cli] ✅ No weight safety issues detected. Please note this does not guarantee a successful runtime upgrade. Always test your runtime upgrade with recent state, and ensure that the weight usage of your migrations will not drastically differ between testing and actual on-chain execution.
+[2026-09-14T14:57:46Z INFO  try-runtime::cli] ----------------------------------------------------
+    
+    
+[2026-09-14T14:57:46Z INFO  try-runtime::cli] 🔬 Running Multi-Block-Migrations with checks: All
+    
+    
+[2026-09-14T14:57:46Z INFO  try-runtime::cli] ----------------------------------------------------
+    
+    
+[2026-09-14T14:57:46Z INFO  remote-ext] since no at is provided, setting it to latest finalized head, 0x6be1f8a15e46c5dba922eb8c293f0a2a6c46b776d0cc443509efa2765e629ea9
+[2026-09-14T14:57:46Z INFO  remote-ext] since no prefix is filtered, the data for all pallets will be downloaded
+[2026-09-14T14:57:46Z INFO  remote-ext] scraping key-pairs from remote at block height 0x6be1f8a15e46c5dba922eb8c293f0a2a6c46b776d0cc443509efa2765e629ea9
+⏳ Scraping keys...
+[2026-09-14T14:57:46Z INFO  remote-ext] 🔧 Initialized work queue with 16 ranges
+[2026-09-14T14:57:46Z INFO  remote-ext] 🌐 Using 1 RPC provider(s)
+[2026-09-14T14:57:46Z INFO  remote-ext] 🚀 Spawning 4 parallel workers for key fetching
+[2026-09-14T14:57:47Z INFO  remote-ext] 📊 Scraped 10862 keys so far...
+[2026-09-14T14:57:47Z INFO  remote-ext] 🎉 Parallel key fetching complete: 10988 unique keys
+✅ Found 10988 keys in 1.25s
+[2026-09-14T14:57:47Z INFO  remote-ext] 🔧 Initialized 11 batches for value fetching
+[2026-09-14T14:57:47Z INFO  remote-ext] 🚀 Spawning 4 parallel workers for value fetching
+
+⏳ Inserting keys into DB...
+✅ Inserted keys into DB in 0.20s
+[2026-09-14T14:58:19Z INFO  remote-ext] adding data for hashed prefix: , took 32.65s
+[2026-09-14T14:58:19Z INFO  remote-ext] adding data for hashed key: 3a636f6465
+[2026-09-14T14:58:19Z INFO  remote-ext] adding data for hashed key: 26aa394eea5630e07c48ae0c9558cef7f9cce9c888469bb1a0dceaa129672ef8
+[2026-09-14T14:58:19Z INFO  remote-ext] adding data for hashed key: 26aa394eea5630e07c48ae0c9558cef702a5c1b19ab7a04f536c519aca4983ac
+[2026-09-14T14:58:19Z INFO  remote-ext] 👩‍👦 no child roots found to scrape
+[2026-09-14T14:58:19Z INFO  remote-ext] initialized state externalities with storage root 0x5a67d738ee903e1730bb1f07284cae926044ec137edace8c856415b5b273f760 and state_version V1
+[2026-09-14T14:58:20Z INFO  try-runtime::cli] Original runtime [Name: "vitreus-power-plant"] [Version: 213] [Code hash: 0xd28a...e405]
+[2026-09-14T14:58:21Z INFO  try-runtime::cli] New runtime      [Name: "vitreus-power-plant"] [Version: 219] [Code hash: 0xc027...0ebd]
+[2026-09-14T14:58:53Z INFO  try_runtime_core::common::empty_block::production] Producing new empty block at height 12800196
+[2026-09-14T14:58:53Z INFO  try_runtime_core::common::empty_block::production] Produced a new block (0xa59753acd5236d7194cdedce2d8ce18be7a6be49a1fd73cf6899be96c5c1de81)
+[2026-09-14T14:58:53Z INFO  runtime::frame-support] 🐥 New pallet "VitreusDex" detected in the runtime. Initializing the on-chain storage version to match the storage version defined in the pallet: StorageVersion(1)
+[2026-09-14T14:58:53Z INFO  runtime::frame-support] 🐥 New pallet "Launchpad" detected in the runtime. Initializing the on-chain storage version to match the storage version defined in the pallet: StorageVersion(0)
+[2026-09-14T14:58:53Z WARN  frame_support::migrations] 🚚 Pallet "VitreusDex" VersionedMigration migration 0->1 can be removed; on-chain is already at StorageVersion(1).
+[2026-09-14T14:58:53Z WARN  frame_support::migrations] 🚚 Pallet "Privileges" VersionedMigration migration 0->1 can be removed; on-chain is already at StorageVersion(1).
+[2026-09-14T14:58:53Z INFO  runtime::staking] [12800195] 💸 Fixed 0 out of 39 cooperators
+[2026-09-14T14:58:53Z INFO  runtime::frame-support] ⚠️ Ethereum declares internal migrations (which *might* execute). On-chain `StorageVersion(0)` vs in-code storage version `NoStorageVersionSet`
+[2026-09-14T14:58:53Z INFO  try_runtime_core::common::empty_block::production] Executed the new block
+[2026-09-14T14:58:53Z INFO  try-runtime::cli] MBM ongoing for 1 blocks
+[2026-09-14T14:58:53Z INFO  try_runtime_core::common::empty_block::production] Producing new empty block at height 12800197
+[2026-09-14T14:58:53Z INFO  try_runtime_core::common::empty_block::production] Produced a new block (0xcb8a4f9293faec47cd4755dfe36f24b26e6ce948719ce42e3baa85f93720063e)
+[2026-09-14T14:58:53Z INFO  try_runtime_core::common::empty_block::production] Executed the new block
+[2026-09-14T14:58:53Z INFO  try-runtime::cli] MBM finished after 1 blocks
+[2026-09-14T14:58:53Z INFO  try-runtime::cli] MBM finished. Executing block one more time.
+[2026-09-14T14:58:53Z INFO  vitreus_power_plant_runtime] try-runtime::on_runtime_upgrade
+[2026-09-14T14:58:53Z WARN  frame_support::migrations] 🚚 Pallet "VitreusDex" VersionedMigration migration 0->1 can be removed; on-chain is already at StorageVersion(1).
+[2026-09-14T14:58:53Z WARN  frame_support::migrations] 🚚 Pallet "Privileges" VersionedMigration migration 0->1 can be removed; on-chain is already at StorageVersion(1).
+[2026-09-14T14:58:53Z INFO  runtime::staking] [12800197] 💸 Fixed 0 out of 39 cooperators
+[2026-09-14T14:58:53Z INFO  runtime::frame-support] ⚠️ Ethereum declares internal migrations (which *might* execute). On-chain `StorageVersion(0)` vs in-code storage version `NoStorageVersionSet`
+[2026-09-14T14:58:54Z INFO  runtime::executive] ✅ Entire runtime state decodes without error. 11799844 bytes total.
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "System" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "Timestamp" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "Babe" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "Grandpa" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "Balances" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "Assets" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "AssetRate" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "TransactionPayment" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "Sudo" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "PoolAssets" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "AssetsFreezer" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "EVM" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "EVMChainId" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "Ethereum" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "HotfixSufficients" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "Nfts" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "Reputation" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "AtomicSwap" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "Claiming" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "Vesting" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "SimpleVesting" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "Kickstart" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "Authorship" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "ImOnline" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "NacManaging" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "EnergyFee" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "Offences" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "Session" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "Utility" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "Historical" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "AuthorityDiscovery" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "EnergyGeneration" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "EnergyBroker" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "Privileges" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "DynamicEnergy" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "VitreusDex" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "Proxy" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "Scheduler" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "Preimage" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "Council" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "TechnicalCommittee" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "TechnicalMembership" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "Treasury" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "TreasuryExtension" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "Bounties" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "Democracy" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "Elections" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "Multisig" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "DemocracyExtension" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "Launchpad" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "TechnicalCommitteeTreasury" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "ParachainsOrigin" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "Configuration" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "ParasShared" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "ParaInclusion" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "ParaInherent" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "ParaScheduler" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "Paras" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "Initializer" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "Dmp" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "Hrmp" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "ParaSessionInfo" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "ParasDisputes" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "ParasSlashing" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "ParaAssignmentProvider" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "Registrar" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "Slots" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "ParasSudoWrapper" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "Auctions" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "XcmPallet" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "MessageQueue" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "Beefy" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "Mmr" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "MmrLeaf" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "Faucet" try-state checks
+[2026-09-14T14:58:54Z INFO  runtime::frame-support] 🩺 Running "ManualBridge" try-state checks

@@ -1,0 +1,79 @@
+chain Testnet spec 219 | launchpad pallet: true
+launch params: {"graduationTarget":"3,000,000,000,000,000,000,000","curveFeeBps":"100","protocolShareBps":"5,000","poolFeeTier":"3","creationFee":"1,000,000,000,000,000,000"}
+constants: supply 1,000,000,000.000000 sellable 800,000,000.000000 floor 266,666,667.000000 assetBase 18446744073709551616 pallet index 57
+  launchpad.create_launch: tx 0x1d131bfbda27949e27f698731d60b4720a079f73dace22adab69b7bee287aa38 in block 0xe945dedfca7cefee513af37f3a7d4b8b4a1e0fa58cd11afa8e8ce9aaa294f776
+    event assets.Withdrawn {"assetId":"0","who":"0x3Cd0A705a2DC65e5b1E1205896BaA2be8A07c6e0","amount":"19,563,744,658"}
+    event nfts.Issued {"collection":"0","item":"1,234,555,131","owner":"0x6D6f646c767472732F6C70640500000000000000"}
+    event nacManaging.NftMinted {"owner":"0x6D6f646c767472732F6C70640500000000000000","itemId":"1,234,555,131"}
+    event assets.ForceCreated {"assetId":"18,446,744,073,709,551,621","owner":"0x6D6f646c767472732F6C70640500000000000000"}
+    event assets.MetadataSet {"assetId":"18,446,744,073,709,551,621","name":"Dev Launch","symbol":"DLNCH","decimals":"18","isFrozen":false}
+    event assets.Issued {"assetId":"18,446,744,073,709,551,621","owner":"0x6D6f646c767472732F6C70640500000000000000","amount":"1,000,000,000,000,000,000,000,000,000"}
+    event launchpad.LaunchCreated {"id":"5","assetId":"18,446,744,073,709,551,621","creator":"0x3Cd0A705a2DC65e5b1E1205896BaA2be8A07c6e0","paramsHash":"0x0c3f5880b812a3c65293a9880e6135b9bb26c051362677e871624da8d92752be"}
+    event assets.Deposited {"assetId":"0","who":"0x6d6f646C70792f74727372790000000000000000","amount":"2,738,924,252"}
+  launch id 5 (expected 5) asset id 18446744073709551621 (= 2^64 + 5)
+  escrow 0x6D6f646c767472732F6C70640500000000000000 | asset supply 1,000,000,000.000000 | metadata {"deposit":"130","name":"Dev Launch","symbol":"DLNCH","decimals":"18","isFrozen":false}
+  [created] phase Trading realQuote 0.000000 VTRS tokensRemaining 800,000,000.000000 creatorUnclaimed 0.000000 protocolPaid 0.000000
+  launchpad.buy(10 VTRS) by baltathar: tx 0x569900446cbf864641e0d021f816709a53f5753f4e64021755412373e475eb92 in block 0xf03db7fe1d3982ea5c86f88f15b9050d9841c4e7ffd50edd2c3c58ef80940dd7
+    event assets.Withdrawn {"assetId":"0","who":"0x3Cd0A705a2DC65e5b1E1205896BaA2be8A07c6e0","amount":"27,112,136,134"}
+    event assets.Transferred {"assetId":"18,446,744,073,709,551,621","from":"0x6D6f646c767472732F6C70640500000000000000","to":"0x3Cd0A705a2DC65e5b1E1205896BaA2be8A07c6e0","amount":"10,456,480,842,954,747,994,850,975"}
+    event launchpad.Bought {"launchId":"5","who":"0x3Cd0A705a2DC65e5b1E1205896BaA2be8A07c6e0","quoteUsed":"10,000,000,000,000,000,000","fee":"100,000,000,000,000,000","tokensOut":"10,456,480,842,954,747,994,850,975"}
+    event assets.Deposited {"assetId":"0","who":"0x6d6f646C70792f74727372790000000000000000","amount":"3,795,699,059"}
+    got 10,456,480.842954 DLNCH (event tokensOut 10,456,480,842,954,747,994,850,975)
+  [after buy 10] phase Trading realQuote 9.900000 VTRS tokensRemaining 789,543,519.157045 creatorUnclaimed 0.050000 protocolPaid 0.050000
+  launchpad.buy(100 VTRS) by alith: tx 0x35e8161cd1da944da5497a74f2cd0edbea0b12cc3f1cc67d7b5963ebb25e6869 in block 0x7f4f0a1528765bba74f6607e4f82ffe89de9cb40833fa725bc387668e7272c95
+    event assets.Withdrawn {"assetId":"0","who":"0xf24FF3a9CF04c71Dbc94D0b566f7A27B94566cac","amount":"27,112,136,134"}
+    event assets.Transferred {"assetId":"18,446,744,073,709,551,621","from":"0x6D6f646c767472732F6C70640500000000000000","to":"0xf24FF3a9CF04c71Dbc94D0b566f7A27B94566cac","amount":"94,295,976,579,986,905,896,392,599"}
+    event launchpad.Bought {"launchId":"5","who":"0xf24FF3a9CF04c71Dbc94D0b566f7A27B94566cac","quoteUsed":"100,000,000,000,000,000,000","fee":"1,000,000,000,000,000,000","tokensOut":"94,295,976,579,986,905,896,392,599"}
+    event assets.Deposited {"assetId":"0","who":"0x6d6f646C70792f74727372790000000000000000","amount":"3,795,699,059"}
+    got 94,295,976.579986 DLNCH (event tokensOut 94,295,976,579,986,905,896,392,599)
+  [after buy 100] phase Trading realQuote 108.900000 VTRS tokensRemaining 695,247,542.577058 creatorUnclaimed 0.550000 protocolPaid 0.550000
+  launchpad.buy(500 VTRS) by baltathar: tx 0x7818eaf841554f0b938c6a8a7dd60acccea587948d5f417717d311f0f6d97b07 in block 0x250b1c067d8a9f9ec9fe4af2d176bddd9df6b1b0f262899698c59da6da3808f3
+    event assets.Withdrawn {"assetId":"0","who":"0x3Cd0A705a2DC65e5b1E1205896BaA2be8A07c6e0","amount":"27,112,136,134"}
+    event assets.Transferred {"assetId":"18,446,744,073,709,551,621","from":"0x6D6f646c767472732F6C70640500000000000000","to":"0x3Cd0A705a2DC65e5b1E1205896BaA2be8A07c6e0","amount":"296,868,591,396,373,764,775,755,614"}
+    event launchpad.Bought {"launchId":"5","who":"0x3Cd0A705a2DC65e5b1E1205896BaA2be8A07c6e0","quoteUsed":"500,000,000,000,000,000,000","fee":"5,000,000,000,000,000,000","tokensOut":"296,868,591,396,373,764,775,755,614"}
+    event assets.Deposited {"assetId":"0","who":"0x6d6f646C70792f74727372790000000000000000","amount":"3,795,699,059"}
+    got 296,868,591.396373 DLNCH (event tokensOut 296,868,591,396,373,764,775,755,614)
+  [after buy 500] phase Trading realQuote 603.900000 VTRS tokensRemaining 398,378,951.180684 creatorUnclaimed 3.050000 protocolPaid 3.050000
+  launchpad.sell(47,147,988.289993 DLNCH) by alith: tx 0x3ead3fef10e09837e6ce8e171e94ae9fd238b974f655471b5f88105e0f63dc2c in block 0xb472ca75e22e2081a82ab07273b5d5e8e60b6e7104a6e6a8ca3c8320de0aabb5
+    event assets.Withdrawn {"assetId":"0","who":"0xf24FF3a9CF04c71Dbc94D0b566f7A27B94566cac","amount":"8,984,816,134"}
+    event assets.Transferred {"assetId":"18,446,744,073,709,551,621","from":"0xf24FF3a9CF04c71Dbc94D0b566f7A27B94566cac","to":"0x6D6f646c767472732F6C70640500000000000000","amount":"47,147,988,289,993,452,948,196,299"}
+    event launchpad.Sold {"launchId":"5","who":"0xf24FF3a9CF04c71Dbc94D0b566f7A27B94566cac","tokensIn":"47,147,988,289,993,452,948,196,299","fee":"1,061,799,175,550,923,780","quoteOut":"105,118,118,379,541,454,160"}
+    event assets.Deposited {"assetId":"0","who":"0x6d6f646C70792f74727372790000000000000000","amount":"1,257,874,259"}
+    quoteOut 105,118,118,379,541,454,160 fee 1,061,799,175,550,923,780
+  [after sell] phase Trading realQuote 497.720082 VTRS tokensRemaining 445,526,939.470678 creatorUnclaimed 3.580899 protocolPaid 3.580899
+pool exists before crossing: false
+  launchpad.buy(500000 VTRS, crossing) by baltathar: tx 0x9592d0bc76a949789d02d4b2d3174d801c6919580368176d4d4d157b7332dd6d in block 0x15a540e59f836f308110dea724100e80e4bbfa4ac3451060150a312f64aeb85e
+    event assets.Withdrawn {"assetId":"0","who":"0x3Cd0A705a2DC65e5b1E1205896BaA2be8A07c6e0","amount":"27,112,136,134"}
+    event assets.Transferred {"assetId":"18,446,744,073,709,551,621","from":"0x6D6f646c767472732F6C70640500000000000000","to":"0x3Cd0A705a2DC65e5b1E1205896BaA2be8A07c6e0","amount":"445,526,939,470,678,034,281,197,111"}
+    event launchpad.Bought {"launchId":"5","who":"0x3Cd0A705a2DC65e5b1E1205896BaA2be8A07c6e0","quoteUsed":"2,527,555,468,489,992,305,687","fee":"25,275,554,684,899,923,057","tokensOut":"445,526,939,470,678,034,281,197,111"}
+    event launchpad.CurveCompleted {"launchId":"5","raised":"2,999,999,996,250,000,004,690"}
+    event vitreusDex.PoolCreated {"assetA":"Native","assetB":{"WithId":"18,446,744,073,709,551,621"},"feeTier":"3"}
+    event nfts.Issued {"collection":"0","item":"660,703,867","owner":"0x6D6f646c767472732f6465780400440105000000"}
+    event nacManaging.NftMinted {"owner":"0x6D6f646c767472732f6465780400440105000000","itemId":"660,703,867"}
+    event assets.Transferred {"assetId":"18,446,744,073,709,551,621","from":"0x6D6f646c767472732F6C70640500000000000000","to":"0x6D6f646c767472732f6465780400440105000000","amount":"200,000,000,000,000,000,000,000,000"}
+    event vitreusDex.LiquidityAdded {"provider":"0x6D6f646c767472732F6C70640500000000000000","assetA":"Native","assetB":{"WithId":"18,446,744,073,709,551,621"},"amountA":"2,999,999,996,250,000,004,690","amountB":"200,000,000,000,000,000,000,000,000","sharesMinted":"774,596,668,757,360,459,213,113"}
+    event vitreusDex.LiquidityLocked {"who":"0x6D6f646c767472732F6C70640500000000000000","pool":["Native",{"WithId":"18,446,744,073,709,551,621"}],"lockedUntil":"4,294,967,295"}
+    event vitreusDex.ReservedPoolSeeded {"who":"0x6D6f646c767472732F6C70640500000000000000","asset":{"WithId":"18,446,744,073,709,551,621"},"quote":"Native","amountAsset":"200,000,000,000,000,000,000,000,000","amountQuote":"2,999,999,996,250,000,004,690","shares":"774,596,668,757,360,459,213,113"}
+    event launchpad.Graduated {"launchId":"5","quoteSeeded":"2,999,999,996,250,000,004,690","tokensSeeded":"200,000,000,000,000,000,000,000,000","shares":"774,596,668,757,360,459,213,113"}
+    event assets.Deposited {"assetId":"0","who":"0x6d6f646C70792f74727372790000000000000000","amount":"3,795,699,059"}
+  crossing events: assets.Withdrawn, assets.Transferred, launchpad.Bought, launchpad.CurveCompleted, vitreusDex.PoolCreated, assets.Transferred, vitreusDex.LiquidityAdded, vitreusDex.LiquidityLocked, vitreusDex.ReservedPoolSeeded, launchpad.Graduated, assets.Deposited
+  [after crossing] phase Graduated realQuote 0.000000 VTRS tokensRemaining 0.000000 creatorUnclaimed 16.218676 protocolPaid 16.218676
+pool (Native, 18446744073709551621): reserveA 2,999.999996 VTRS reserveB 200,000,000.000000 DLNCH feeTier 3 account 0x6D6f646c767472732f6465780400440105000000
+  pool account balances: 2,999.999996 VTRS, 200,000,000.000000 DLNCH
+  totalLiquidity 774596668757360459214113 | escrow position shares 774596668757360459213113 lockedUntil 4294967295 | curve lpShares 774596668757360459213113
+  escrow after: 16.218776 VTRS free, 0.000000 DLNCH
+  opening price vs p_end: relative diff 9.37e-10 (I7 requires <= 1e-6)
+  raised 2,999.999996 VTRS vs T 3,000.000000 | pre-crossing realQuote 497.720082
+  vitreusDex.swap 1 VTRS -> DLNCH by alith: tx 0xfd060f02edb9df89e3d9962825e6d1dae3b9740352ab6c94c2dbbe20969229ae in block 0x9e2c55530fbd411897f8181e097b7e611517f6ed4d1945bbc927f2d593086fba
+    event assets.Withdrawn {"assetId":"0","who":"0xf24FF3a9CF04c71Dbc94D0b566f7A27B94566cac","amount":"1,000,000,000"}
+    event assets.Transferred {"assetId":"18,446,744,073,709,551,621","from":"0x6D6f646c767472732f6465780400440105000000","to":"0xf24FF3a9CF04c71Dbc94D0b566f7A27B94566cac","amount":"66,444,584,999,307,627,910,250"}
+    event vitreusDex.SwapExecuted {"who":"0xf24FF3a9CF04c71Dbc94D0b566f7A27B94566cac","assetIn":"Native","assetOut":{"WithId":"18,446,744,073,709,551,621"},"amountIn":"1,000,000,000,000,000,000","amountOut":"66,444,584,999,307,627,910,250","fee":"3,000,000,000,000,000"}
+    event vitreusDex.FeesCollected {"pool":["Native",{"WithId":"18,446,744,073,709,551,621"}],"amount":"3,000,000,000,000,000","recipient":"0x6D6f646c767472732f6465780400440105000000"}
+    event assets.Deposited {"assetId":"0","who":"0x6d6f646C70792f74727372790000000000000000","amount":"140,000,000"}
+    received 66,444.584999 DLNCH
+  pool after swap: reserveA 3,000.996996 reserveB 199,933,555.415000 feesCollected 3000000000000000
+  launchpad.claim_creator_fees by baltathar: tx 0x57aa6c9e9bf690ee3aa77420d5c272e17bfbcb766156206caeadf877da8711a0 in block 0xaf906aa951d85570c79b44cd3d2c0ce092f3ea03b14bd373897903f02b4e39d2
+    event assets.Withdrawn {"assetId":"0","who":"0x3Cd0A705a2DC65e5b1E1205896BaA2be8A07c6e0","amount":"3,758,168,102"}
+    event launchpad.CreatorFeesClaimed {"launchId":"5","recipient":"0x3Cd0A705a2DC65e5b1E1205896BaA2be8A07c6e0","amount":"16,218,676,930,225,423,419"}
+    event assets.Deposited {"assetId":"0","who":"0x6d6f646C70792f74727372790000000000000000","amount":"526,139,776"}
+done
