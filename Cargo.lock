@@ -14158,6 +14158,7 @@ dependencies = [
  "clap 4.5.20",
  "fc-cli",
  "fc-db",
+ "frame-benchmarking-cli",
  "futures",
  "log",
  "polkadot-node-metrics",
