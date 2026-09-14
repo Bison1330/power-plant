@@ -269,7 +269,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
     // 214 is taken by upstream PR #99 (VTRS as EVM native currency); this
     // runtime adds pallet-launchpad on top of 213 and skips to 215 so the two
     // never share a number.
-    spec_version: 218,
+    spec_version: 219,
     impl_version: 0,
     apis: RUNTIME_API_VERSIONS,
     transaction_version: 4,
