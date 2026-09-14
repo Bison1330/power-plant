@@ -78,7 +78,6 @@ use sp_runtime::{
     },
     DispatchError, RuntimeDebug, SaturatedConversion,
 };
-use vitreus_runtime_common::{OnEnergyBurn, OnEnergySell};
 
 /// The PalletId used to derive the DEX sovereign account.
 pub const PALLET_ID: PalletId = PalletId(*b"vtrs/dex");
@@ -414,14 +413,6 @@ pub mod pallet {
     #[pallet::storage]
     pub type ProtocolFeesUnclaimed<T: Config> = StorageValue<_, T::Balance, ValueQuery>;
 
-    /// Cumulative energy sold through the on-chain hook.
-    #[pallet::storage]
-    pub type TotalEnergySold<T: Config> = StorageValue<_, T::Balance, ValueQuery>;
-
-    /// Cumulative energy burned through the on-chain hook.
-    #[pallet::storage]
-    pub type TotalEnergyBurned<T: Config> = StorageValue<_, T::Balance, ValueQuery>;
-
     // ---- Settlement: governance-adjustable parameters ----
 
     /// Number of blocks during which solvers may bid on an open intent.
@@ -641,16 +632,6 @@ pub mod pallet {
             amount_quote: T::Balance,
             /// LP shares credited to `who`.
             shares: T::Balance,
-        },
-        /// The `OnEnergySell` hook was invoked against this pallet.
-        EnergySold {
-            /// The amount reported by the hook.
-            amount: T::Balance,
-        },
-        /// The `OnEnergyBurn` hook was invoked against this pallet.
-        EnergyBurned {
-            /// The amount reported by the hook.
-            amount: T::Balance,
         },
 
         // ---- Solver marketplace events ----
@@ -2549,25 +2530,6 @@ impl<T: Config> ReservedPoolSeeder<T::AccountId, T::AssetKind, T::Balance, Block
         fee_tier: u32,
     ) -> Result<T::Balance, DispatchError> {
         Self::do_seed_reserved_pool_for(who, asset, quote, amount_asset, amount_quote, fee_tier)
-    }
-}
-
-/// Finding 12: energy hooks now persist cumulative counters.
-impl<T: Config> OnEnergySell<T::Balance> for Pallet<T> {
-    fn on_energy_sell(amount: T::Balance) {
-        TotalEnergySold::<T>::mutate(|total| {
-            *total = total.checked_add(&amount).unwrap_or(*total);
-        });
-        Self::deposit_event(Event::EnergySold { amount });
-    }
-}
-
-impl<T: Config> OnEnergyBurn<T::Balance> for Pallet<T> {
-    fn on_energy_burn(amount: T::Balance) {
-        TotalEnergyBurned::<T>::mutate(|total| {
-            *total = total.checked_add(&amount).unwrap_or(*total);
-        });
-        Self::deposit_event(Event::EnergyBurned { amount });
     }
 }
 

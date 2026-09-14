@@ -21,7 +21,6 @@ sp-io = { workspace = true, default-features = false }
 sp-std = { workspace = true, default-features = false }
 sp-runtime = { workspace = true, default-features = false }
 sp-arithmetic = { workspace = true, default-features = false }
-vitreus-runtime-common = { workspace = true, default-features = false }
 
 [dev-dependencies]
 pallet-balances = { workspace = true, features = ["std"] }
@@ -43,7 +42,6 @@ std = [
     "sp-std/std",
     "sp-runtime/std",
     "sp-arithmetic/std",
-    "vitreus-runtime-common/std",
 ]
 runtime-benchmarks = [
     "frame-benchmarking/runtime-benchmarks",

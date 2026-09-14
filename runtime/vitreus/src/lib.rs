@@ -1174,7 +1174,7 @@ impl pallet_energy_broker::Config for Runtime {
     );
     type FeelessAccounts = Equals<xcm_config::TreasuryAccount>;
     type SwapFeeTarget = ResolveAssetTo<pallet_treasury::TreasuryAccountId<Runtime>, Self::Assets>;
-    type OnEnergySell = (DynamicEnergy, VitreusDex);
+    type OnEnergySell = DynamicEnergy;
     type SwapFee = SwapFee;
     type NativeAsset = NativeAsset;
     type EnergyAsset = VNRG;
@@ -1420,7 +1420,7 @@ impl pallet_energy_fee::Config for Runtime {
     type LiquidEnergyAsset = LiquidEnergyAsset;
     type EnergyExchange = NativeEnergyExchange<EnergyBroker, NativeAsset, VNRG>;
     type OnWithdrawFee = NacManaging;
-    type OnEnergyBurn = (EnergyBroker, DynamicEnergy, VitreusDex);
+    type OnEnergyBurn = (EnergyBroker, DynamicEnergy);
     type FeeRecyclingRate = TreasuryExtension;
     type FeeRecyclingDestination =
         ResolveTo<pallet_treasury::TreasuryAccountId<Runtime>, Self::EnergyAsset>;

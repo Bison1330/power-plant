@@ -2,10 +2,9 @@
 
 use crate::mock::*;
 use crate::{
-    Error, Event, LiquidityPositions, PoolManager, Pools, TotalEnergySold, TotalLiquidity,
+    Error, Event, LiquidityPositions, PoolManager, Pools, TotalLiquidity,
 };
 use frame_support::{assert_noop, assert_ok};
-use vitreus_runtime_common::OnEnergySell;
 
 fn native() -> NativeOrAssetId {
     NativeOrAssetId::Native
@@ -279,16 +278,6 @@ fn test_swap_slippage_protection() {
             ),
             Error::<Test>::SlippageExceeded
         );
-    });
-}
-
-#[test]
-fn test_on_energy_sell_hook() {
-    new_test_ext().execute_with(|| {
-        <VitreusDex as OnEnergySell<u128>>::on_energy_sell(42);
-        System::assert_has_event(Event::EnergySold { amount: 42 }.into());
-        // Finding 12: verify cumulative counter.
-        assert_eq!(TotalEnergySold::<Test>::get(), 42);
     });
 }
 
