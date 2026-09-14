@@ -760,3 +760,54 @@ Errors: see §2 header; plus `ReservedAsset`, `PoolAlreadySeeded` surfaced from 
 3. **Re-measure weights on hardware that passes `benchmark machine` cleanly, before mainnet.** The weights in `0376ac8` were measured on a box that scored 4/5: CPU and disk pass but Memory Copy reached only 39.8 % of reference (4.58 GiB/s against 11.49). They are conservative on storage-heavy calls — safe, not accurate — and must be regenerated per `pallets/BENCHMARKING.md` on a box whose machine score is 5/5, with the score kept in `dev-ops/benchmarks/`. Same session: `pallet_assets` and every other pallet's weights, which were produced under the old `AssetId = u32` switch and measured a narrower type than production; that is a separate commit.
    - **Still unproven:** the `pallet_nfts` ECDSA `BenchmarkHelper` in `c2dc9b0` (keccak-hash then `ecdsa_sign_prehashed`, key recovered from the keystore by address) is derived from `EthereumSignature::verify` and type-checks, but the signature round-trip is only demonstrated by `benchmark pallet --pallet pallet_nfts --extrinsic mint_pre_signed` succeeding; that pallet was not part of the 2026-09-14 run.
 4. **EVM precompile.** Out of scope until PR #99 lands (VTRS as EVM native currency); when added it must call `do_buy` / `do_sell`, never re-implement pricing.
+
+---
+
+## 9. v2 design record — validator-backed treasuries
+
+**Status:** idea, recorded 2026-09-14 · **v2, after testnet** · nothing in v1 implements, reserves storage for, or depends on this. This section is a record of the idea and of the parts that are hard, written so the v2 design starts from the chain as it is rather than from the pitch. It is not a build plan.
+
+### 9.1 The idea
+
+Trading fees accumulate VTRS into a per-launch treasury; the treasury's VTRS is staked with Vitreus validators; the staking yield flows back to the launch — to holders, or to buy-and-burn of the launch token. Trading → VTRS accumulation → staking → yield → rewards → an incentive to trade that compounds with volume.
+
+Why it is worth a v2: it is the one differentiator structurally unavailable to a Solana launchpad (there is no in-protocol staking of the quote asset a program can enter from an owned account with the yield returning on chain), and every VTRS it stakes raises staked supply, which matters for the Foundation conversation.
+
+Where the VTRS would come from is already built: D4 (§5.2) routes slices of every swap on a graduated pool to the protocol and to the creator, in VTRS, pull-based. A treasury is a third destination in `FeeRouting`, snapshotted per pool like the other two. The curve fee before graduation (§2.2) splits the same way and could feed the same account.
+
+### 9.2 What the chain provides today
+
+Read from `pallets/energy-generation`, `pallets/reputation`, `pallets/privileges` and `runtime/vitreus` at the current head of `feature/solver-marketplace`. These are the facts a v2 design is bound by; several of them change the shape of the idea.
+
+- **Staking is `pallet-energy-generation`**, a `pallet-staking` fork with cooperators in place of nominators. `bond(controller, value, payee)` must be signed by the stash; `cooperate(targets: Vec<(validator, stake)>)` by the controller; effects begin at the next era. Runtime parameters: `SessionsPerEra = 4`, epoch 60 min, so an era is 4 h; `BondingDuration = 42` eras = **7 days** to unbond; `MaxCooperations = 256`; `MaxCooperatorRewardedPerValidator = 128` — a cooperator outside a validator's 128 largest earns nothing from it.
+- **Rewards are VNRG, not VTRS.** `do_payout_stakers` mints energy through `pallet_assets` at `ErasEnergyPerStakeCurrency[era]`; `RewardDestination::Account(x)` deposits VNRG to `x`. `payout_stakers(validator, era)` is permissionless, so nothing needs a keeper to trigger the payout. The yield leg of the loop is therefore in the gas token. "Yield → VTRS" is a swap through a VNRG/VTRS pool (the dev chain has none today), and "buy-and-burn of the launch token" is either two hops (VNRG → VTRS → token) or a direct VNRG-side distribution. This is not a problem — VNRG to holders of a launch token is a coherent reward — but the pitch as worded assumes VTRS yield and the design must not.
+- **Cooperating is reputation-gated.** `cooperate` requires the stash's `pallet_reputation` points to be at least each target's `min_coop_reputation`. Points accrue per block for an account that has a record; an account with none starts at zero. A pallet sub-account starts at zero and can only cooperate with validators whose minimum is zero until it has accrued; a v2 either accepts that, seeds the treasury account's record, or gets an internal path from `energy-generation` that bypasses the check for a pallet origin. Which of those is a design decision with governance weight, not an implementation detail.
+- **No unbond tax for a pallet account.** `get_tax_percent` (`privileges`) is zero for non-VIP accounts; a pallet sub-account is never VIP.
+- **Pallet accounts cannot sign.** The treasury acts the way escrow does in v1: the launchpad dispatches `bond` / `cooperate` / `unbond` / `withdraw_unbonded` with `RawOrigin::Signed(treasury_account)`, or `energy-generation` exposes a trait for in-runtime stakers. Dispatching couples the launchpad to those calls' weights and runs the reputation check inside the extrinsic; a trait is cleaner and is a change to a pallet the Foundation owns.
+
+### 9.3 The hard parts
+
+These are the constraints, recorded because each one is where a naive version fails.
+
+1. **Uniform terms.** This is how the pad works, not a per-launch option. Treasury share, validator selection, distribution mode, dead-token handling: governance-set, snapshotted per launch like every other term (§1.4), never chosen by a creator. Configurability is where scams live, and a venue whose launches differ in the thing that makes it trustworthy is not a venue. The one per-launch value is the balance.
+
+2. **Custody and delegation.** Two shapes, neither free:
+   - *Per-launch stash.* A second per-launch sub-account bonds its own balance. Derivation is subject to the §0 caveat: on the production 20-byte `AccountId` only 8 bytes of seed survive `into_sub_account_truncating`, so it cannot be a labelled tuple over the id; it needs a distinct 8-byte seed space (for instance the id with a high bit set, or a second `PalletId`). N launches means N ledgers, N reputation records and N × `cooperate` calls whenever the target set changes (256 × 128-slot competition per validator). Each stash must clear `MinCooperatorBond` before it earns anything, so a small treasury earns nothing for a long time.
+   - *One pooled stash.* One ledger, one set of targets, one payout; each launch's claim on it is internal accounting — shares of the pool, the same arithmetic as LP shares. Cheaper by a factor of N and the small-treasury problem disappears, at the cost of one slashing event touching every launch (it does under both shapes; pooled just makes it visible) and of the accounting being the launchpad's to get right.
+   Validator selection is uniform under either shape: a governance-set list or a rule such as "the K largest by stake with `min_coop_reputation == 0`", re-evaluated on a schedule, never per launch. Whoever holds `LaunchManageOrigin` is choosing where staked VTRS goes; that is a governance power and should be written down as one.
+
+3. **Distribution without iterating holders.** The holder set of a launch token is unbounded; anything that walks it is a DoS surface and an auditor's first question. Pull, never push, exactly as D4: a per-launch accumulator (`reward_per_token`, Synthetix-style) with per-account checkpoints, so a claim is O(1) and the set is never enumerated. The catch is that a checkpoint has to be taken **when a balance changes**, and `pallet_assets` has no transfer hook, so "reward the holders" cannot be made correct without one of:
+   - a lock/stake of launch tokens inside the launchpad (then the set is the stakers, the launchpad sees every balance change, and this is a standard staking-rewards accumulator), or
+   - a transfer hook added to `pallet_assets` (a change to a Foundation pallet with consequences for every asset).
+   Anything that reads `pallet_assets` balances at claim time against a "last claimed" mark is exploitable by moving balance between accounts. **Buy-and-burn has none of this**: the treasury swaps its VNRG → VTRS → token through the DEX and burns; the benefit reaches holders through price and nobody is enumerated. It is the default to record, with holder distribution as the option that costs a hook.
+
+4. **What happens when a token dies.** A treasury whose pool has no volume keeps earning; nothing in the staking pallet stops it. Unbonding takes 7 days and every step needs a caller. To fix in the design: a permissionless wind-down (`unbond` / `withdraw` / final distribution) that anyone may trigger once a no-activity threshold is met, so a treasury is never strandable for lack of a signer; where the balance goes at the end (burn, Treasury, or the last claimants — under a pull model, unclaimed funds are stranded by construction unless a sweep is defined); and the ED of every sub-account, which under the per-launch shape is capital that never comes back.
+
+### 9.4 Open questions for the v2 design
+
+- Is the yield returned as VNRG (direct, one hop fewer, gives holders gas) or converted to VTRS first? The answer decides whether a VNRG/VTRS pool is a prerequisite.
+- Pooled or per-launch stash (9.3.2)? Pooled is the recommendation to argue against.
+- Does the reputation gate get an internal bypass for pallet stakers, or does the treasury earn its reputation like anyone else? Both are defensible; the second is slower and simpler.
+- Buy-and-burn only, or holder distribution with a lock? If the latter, the lock is a v2 feature in its own right (it changes what holding the token means).
+- Slashing: a validator slash reduces the treasury. Is that acceptable as-is (it is the honest consequence of staking) or does uniform validator selection need a slash-history filter?
+- Interaction with D4's creator share: does a treasury share come out of the protocol slice, the creator slice, or the pool's own fee? Each changes who pays for the loop.
