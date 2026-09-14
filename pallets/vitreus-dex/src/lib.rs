@@ -143,11 +143,22 @@ impl<AssetKind, AccountId> CreatorFeeRecipient<AssetKind, AccountId> for () {
 }
 
 /// On-chain record of a trading pair's reserves, fee tier and dedicated sub-account.
+///
+/// **Quoters: price from the pool account's live balances, not from
+/// `reserve_a` / `reserve_b`.** `do_swap` calls `sync_reserves` before it
+/// prices, which re-reads the balances, so the stored reserves are only a
+/// snapshot as of the last sync: they lag by the pool's share of every fee
+/// since (it stays in the account uncounted, Finding 3) and by any direct
+/// transfer. A quote computed from the stored fields overstates the output
+/// and the chain then fails the swap with `SlippageExceeded` at a tight
+/// `amount_out_min`. The frontend's swap page reads balances for this reason.
 #[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 pub struct PoolInfo<Balance, AccountId> {
-    /// Current reserve of `asset_a` held by the pool.
+    /// Reserve of `asset_a` as of the last `sync_reserves`; see the struct docs
+    /// before pricing from this.
     pub reserve_a: Balance,
-    /// Current reserve of `asset_b` held by the pool.
+    /// Reserve of `asset_b` as of the last `sync_reserves`; see the struct docs
+    /// before pricing from this.
     pub reserve_b: Balance,
     /// Swap fee tier for this pool, expressed in 10ths of a percent.
     pub fee_tier: u32,
@@ -1806,6 +1817,8 @@ pub mod pallet {
         /// Finding 2: sync pool reserves from actual on-chain asset balances.
         /// Absorbs any direct transfers or previously uncounted fees into the
         /// reserve tracking so the AMM math operates on accurate figures.
+        /// Runs at the top of `do_swap`, which is why an off-chain quote must
+        /// start from the same balances (see [`PoolInfo`]).
         fn sync_reserves(
             pair: &(T::AssetKind, T::AssetKind),
             pool: &mut PoolInfo<T::Balance, T::AccountId>,
