@@ -2091,6 +2091,15 @@ pub mod pallet {
             let (pair, (amount_a, amount_a_min), (amount_b, amount_b_min)) =
                 Self::canonical_pair_with(asset_a, asset_b, (amount_a, amount_a_min), (amount_b, amount_b_min));
             let mut pool = Pools::<T>::get(&pair).ok_or(Error::<T>::PoolNotFound)?;
+
+            // D6: price the deposit against what the pool actually holds. The
+            // pool's share of every swap fee sits in the account uncounted
+            // until the next sync (Finding 3); pricing against the stale
+            // recorded reserves minted a depositor shares against a smaller
+            // pool than the one `remove_liquidity` (which syncs) pays out of,
+            // so swap → add → remove skimmed existing LPs' fees.
+            Self::sync_reserves(&pair, &mut pool);
+
             let total_shares =
                 TotalLiquidity::<T>::get(&pair).unwrap_or_else(T::Balance::zero);
 

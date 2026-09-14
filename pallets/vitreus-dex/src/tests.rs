@@ -1722,3 +1722,137 @@ fn d4_migration_v1_gives_existing_pools_zero_routing() {
         assert_eq!(Pools::<Test>::get(key).unwrap().routing, FeeRouting::default());
     });
 }
+
+// ---- D6: add_liquidity must price against synced reserves -------------------
+//
+// do_swap leaves the pool's own share of each fee in the pool account without
+// counting it in `reserve_a/b` (Finding 3); `remove_liquidity` and `do_swap`
+// call `sync_reserves` before using the reserves, `do_add_liquidity_for` did
+// not. A depositor's optimal amount and shares were therefore computed
+// against reserves smaller than what the pool really held, and on removal —
+// which does sync — the depositor was paid out of the uncounted fees. With
+// no routing every fee stays in the pool, so the numbers below are exact.
+
+/// swap → add → remove, with zero trading service provided, must not return
+/// more than was deposited. Fails before the D6 sync (Bob withdraws 10_995
+/// USDC against 10_990 deposited: half of the uncounted 10 USDC fee).
+#[test]
+fn d6_add_liquidity_cannot_capture_unsynced_fees() {
+    new_test_ext().execute_with(|| {
+        // 1.0 % tier so the uncounted fee is visible in whole units.
+        assert_ok!(VitreusDex::create_pool(RuntimeOrigin::root(), usdc(), vnrg(), 10));
+        assert_ok!(VitreusDex::add_liquidity(
+            RuntimeOrigin::signed(ALICE),
+            usdc(),
+            vnrg(),
+            10_000,
+            40_000,
+            0,
+            0,
+        ));
+        // 20_000 total shares; the pool holds exactly its recorded reserves.
+        assert_eq!(TotalLiquidity::<Test>::get(pair()), Some(20_000));
+
+        // A swap: fee = 10 USDC stays in the pool account, uncounted.
+        // reserves: a = 10_000 + 990 = 10_990, b = 40_000 − 3_603 = 36_397;
+        // the account holds 11_000 USDC.
+        assert_ok!(VitreusDex::swap_exact_tokens_for_tokens(
+            RuntimeOrigin::signed(CHARLIE),
+            usdc(),
+            vnrg(),
+            1_000,
+            0,
+            CHARLIE,
+        ));
+        let pool_account = VitreusDex::pool_account_for(usdc(), vnrg());
+        let pool = Pools::<Test>::get(pair()).unwrap();
+        assert_eq!(pool.reserve_a, 10_990);
+        assert_eq!(pool.reserve_b, 36_397);
+        assert_eq!(Assets::balance(USDC_ID, &pool_account), 11_000);
+
+        // Bob deposits at the recorded ratio and immediately withdraws.
+        let bob_usdc_before = Assets::balance(USDC_ID, &BOB);
+        let bob_vnrg_before = Assets::balance(VNRG_ID, &BOB);
+        assert_ok!(VitreusDex::add_liquidity(
+            RuntimeOrigin::signed(BOB),
+            usdc(),
+            vnrg(),
+            10_990,
+            36_397,
+            0,
+            0,
+        ));
+        let recorded_after_add = Pools::<Test>::get(pair()).unwrap();
+        let held_after_add =
+            (Assets::balance(USDC_ID, &pool_account), Assets::balance(VNRG_ID, &pool_account));
+
+        let bob_shares = LiquidityPositions::<Test>::get(BOB, pair()).unwrap().shares;
+        assert_ok!(VitreusDex::remove_liquidity(
+            RuntimeOrigin::signed(BOB),
+            usdc(),
+            vnrg(),
+            bob_shares,
+            0,
+            0,
+        ));
+        // Floor rounding is in the pool's favour on both legs: Bob gets back
+        // at most what he put in, never a slice of Alice's fees.
+        assert!(Assets::balance(USDC_ID, &BOB) <= bob_usdc_before);
+        assert!(Assets::balance(VNRG_ID, &BOB) <= bob_vnrg_before);
+        // And the fee is still Alice's: the pool holds more USDC than it did
+        // before Bob touched it.
+        assert!(Assets::balance(USDC_ID, &pool_account) >= 11_000);
+        // The add left the recorded reserves equal to the balances it priced
+        // against; before D6 it recorded 21_980 USDC while holding 21_990.
+        assert_eq!(recorded_after_add.reserve_a, held_after_add.0);
+        assert_eq!(recorded_after_add.reserve_b, held_after_add.1);
+    });
+}
+
+/// The exact figures of the D6 scenario after the fix, so a change to the
+/// rounding or the sync order shows up as a number and not just a boolean.
+#[test]
+fn d6_add_liquidity_matches_optimal_amount_against_synced_reserves() {
+    new_test_ext().execute_with(|| {
+        assert_ok!(VitreusDex::create_pool(RuntimeOrigin::root(), usdc(), vnrg(), 10));
+        assert_ok!(VitreusDex::add_liquidity(
+            RuntimeOrigin::signed(ALICE),
+            usdc(),
+            vnrg(),
+            10_000,
+            40_000,
+            0,
+            0,
+        ));
+        assert_ok!(VitreusDex::swap_exact_tokens_for_tokens(
+            RuntimeOrigin::signed(CHARLIE),
+            usdc(),
+            vnrg(),
+            1_000,
+            0,
+            CHARLIE,
+        ));
+        // Synced reserves are (11_000, 36_397). For amount_a = 10_990:
+        //   optimal_b = 10_990 × 36_397 / 11_000 = 36_363 (floor)
+        //   shares    = min(10_990 × 20_000 / 11_000, 36_363 × 20_000 / 36_397)
+        //             = min(19_981, 19_981) = 19_981
+        let bob_usdc_before = Assets::balance(USDC_ID, &BOB);
+        let bob_vnrg_before = Assets::balance(VNRG_ID, &BOB);
+        assert_ok!(VitreusDex::add_liquidity(
+            RuntimeOrigin::signed(BOB),
+            usdc(),
+            vnrg(),
+            10_990,
+            36_397,
+            0,
+            0,
+        ));
+        assert_eq!(bob_usdc_before - Assets::balance(USDC_ID, &BOB), 10_990);
+        assert_eq!(bob_vnrg_before - Assets::balance(VNRG_ID, &BOB), 36_363);
+        assert_eq!(LiquidityPositions::<Test>::get(BOB, pair()).unwrap().shares, 19_981);
+        assert_eq!(TotalLiquidity::<Test>::get(pair()), Some(39_981));
+        let pool = Pools::<Test>::get(pair()).unwrap();
+        assert_eq!(pool.reserve_a, 21_990);
+        assert_eq!(pool.reserve_b, 72_760);
+    });
+}
