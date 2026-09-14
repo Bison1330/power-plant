@@ -111,12 +111,31 @@ fn arm_worst_case_seed<T: Config>(id: LaunchId) -> (BalanceOf<T>, BalanceOf<T>) 
     (T::Currency::balance(&excess), T::LaunchAssets::balance(launch.asset_id, &excess))
 }
 
-/// Both parked balances reached the excess recipient, i.e. both sweeps ran.
+/// Both sweeps ran: the pool account holds exactly what the seed deposited
+/// (had the parked balances been absorbed instead, `sync_reserves` would
+/// have counted them and the pool would hold more), and the excess
+/// recipient gained at least the parked amounts.
+///
+/// The recipient side is a lower bound on purpose. In the real runtime
+/// `ExcessRecipient` and the launchpad's `Treasury` are the same account,
+/// so a crossing buy also pays its protocol fee share there before this
+/// runs; an exact equality held in the mock (where they are separate
+/// accounts) and trapped the `buy_crossing` benchmark on the testnet
+/// runtime.
 fn assert_swept<T: Config>(id: LaunchId, before: (BalanceOf<T>, BalanceOf<T>)) {
     let launch = Launches::<T>::get(id).expect("launch");
+    let pool = DexOf::<T>::pool_account_for(T::NativeAssetKind::get(), asset_kind::<T>(id));
+    let terms = Launchpad::<T>::curve_terms(id).expect("terms");
+    let raise: BalanceOf<T> = curve::raise_at_sellout(&terms, T::Sellable::get().into()).expect("raise").into();
+    assert_eq!(T::Currency::balance(&pool), raise, "pool holds the raised VTRS and nothing parked");
+    assert_eq!(
+        T::LaunchAssets::balance(launch.asset_id, &pool),
+        Launchpad::<T>::reserved(),
+        "pool holds the reserved supply and nothing parked"
+    );
     let excess = <T as pallet_vitreus_dex::Config>::ExcessRecipient::get();
-    assert_eq!(T::Currency::balance(&excess), before.0 + small_quote::<T>());
-    assert_eq!(T::LaunchAssets::balance(launch.asset_id, &excess), before.1 + small_quote::<T>());
+    assert!(T::Currency::balance(&excess) >= before.0 + small_quote::<T>());
+    assert!(T::LaunchAssets::balance(launch.asset_id, &excess) >= before.1 + small_quote::<T>());
 }
 
 /// Write the storage a crossing buy whose seed was deferred leaves behind:
