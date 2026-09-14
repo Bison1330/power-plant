@@ -14,3 +14,5 @@ testnet_keys_envs
 # direnv files
 .envrc
 .direnv
+# symlink to a checkout that has @polkadot/api, for scripts/*.mjs
+scripts/node_modules
