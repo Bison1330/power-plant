@@ -1,0 +1,120 @@
+[2026-09-15T02:42:25Z INFO  remote-ext] since no at is provided, setting it to latest finalized head, 0x80b6316dae74c32032a071f8e4c3a3f6288b63310333ee049d6550340075dfe2
+[2026-09-15T02:42:25Z INFO  remote-ext] since no prefix is filtered, the data for all pallets will be downloaded
+[2026-09-15T02:42:25Z INFO  remote-ext] scraping key-pairs from remote at block height 0x80b6316dae74c32032a071f8e4c3a3f6288b63310333ee049d6550340075dfe2
+⏳ Scraping keys...
+[2026-09-15T02:42:25Z INFO  remote-ext] 🔧 Initialized work queue with 16 ranges
+[2026-09-15T02:42:25Z INFO  remote-ext] 🌐 Using 1 RPC provider(s)
+[2026-09-15T02:42:25Z INFO  remote-ext] 🚀 Spawning 4 parallel workers for key fetching
+[2026-09-15T02:42:25Z INFO  remote-ext] 🎉 Parallel key fetching complete: 3661 unique keys
+✅ Found 3661 keys in 0.53s
+[2026-09-15T02:42:25Z INFO  remote-ext] 🔧 Initialized 4 batches for value fetching
+[2026-09-15T02:42:25Z INFO  remote-ext] 🚀 Spawning 4 parallel workers for value fetching
+
+⏳ Inserting keys into DB...
+✅ Inserted keys into DB in 0.04s
+[2026-09-15T02:42:26Z INFO  remote-ext] adding data for hashed prefix: , took 0.91s
+[2026-09-15T02:42:26Z INFO  remote-ext] adding data for hashed key: 3a636f6465
+[2026-09-15T02:42:26Z INFO  remote-ext] adding data for hashed key: 26aa394eea5630e07c48ae0c9558cef7f9cce9c888469bb1a0dceaa129672ef8
+[2026-09-15T02:42:26Z INFO  remote-ext] adding data for hashed key: 26aa394eea5630e07c48ae0c9558cef702a5c1b19ab7a04f536c519aca4983ac
+[2026-09-15T02:42:26Z INFO  remote-ext] 👩‍👦 no child roots found to scrape
+[2026-09-15T02:42:26Z INFO  remote-ext] initialized state externalities with storage root 0x72ab06dde8a8a37565258cbf05d67d75de184f06c95f22a6553c3b7ba102fb59 and state_version V1
+[2026-09-15T02:42:27Z INFO  try-runtime::cli] Original runtime [Name: "vitreus-power-plant"] [Version: 219] [Code hash: 0x39ad...499a]
+[2026-09-15T02:42:28Z INFO  try-runtime::cli] New runtime      [Name: "vitreus-power-plant"] [Version: 220] [Code hash: 0xb492...6b37]
+[2026-09-15T02:42:29Z INFO  try-runtime::cli] ------------------------------------------------------------
+    
+    
+[2026-09-15T02:42:29Z INFO  try-runtime::cli] 🔬 Running TryRuntime_on_runtime_upgrade with checks: None
+    
+    
+[2026-09-15T02:42:29Z INFO  try-runtime::cli] ------------------------------------------------------------
+    
+    
+[2026-09-15T02:42:50Z INFO  vitreus_power_plant_runtime] try-runtime::on_runtime_upgrade
+[2026-09-15T02:42:50Z WARN  frame_support::migrations] 🚚 Pallet "VitreusDex" VersionedMigration migration 0->1 can be removed; on-chain is already at StorageVersion(1).
+[2026-09-15T02:42:50Z INFO  frame_support::migrations] 🚚 Pallet "VitreusDex" VersionedMigration migrating storage version from 1 to 2.
+[2026-09-15T02:42:50Z INFO  runtime::vitreus-dex] D8 migration: 4 pools moved to hash-derived accounts
+[2026-09-15T02:42:50Z WARN  frame_support::migrations] 🚚 Pallet "Privileges" VersionedMigration migration 0->1 can be removed; on-chain is already at StorageVersion(1).
+[2026-09-15T02:42:50Z INFO  runtime::staking] [792074] 💸 Fixed 0 out of 1 cooperators
+[2026-09-15T02:42:50Z INFO  runtime::frame-support] ⚠️ Ethereum declares internal migrations (which *might* execute). On-chain `StorageVersion(0)` vs in-code storage version `NoStorageVersionSet`
+[2026-09-15T02:42:50Z INFO  try-runtime::cli] ---------------------------------------------------------------------------------
+    
+    
+[2026-09-15T02:42:50Z INFO  try-runtime::cli] 🔬 Running TryRuntime_on_runtime_upgrade again to check idempotency: PreAndPost
+    
+    
+[2026-09-15T02:42:50Z INFO  try-runtime::cli] ---------------------------------------------------------------------------------
+    
+    
+[2026-09-15T02:43:13Z INFO  vitreus_power_plant_runtime] try-runtime::on_runtime_upgrade
+[2026-09-15T02:43:13Z WARN  frame_support::migrations] 🚚 Pallet "VitreusDex" VersionedMigration migration 0->1 can be removed; on-chain is already at StorageVersion(2).
+[2026-09-15T02:43:13Z WARN  frame_support::migrations] 🚚 Pallet "VitreusDex" VersionedMigration migration 1->2 can be removed; on-chain is already at StorageVersion(2).
+[2026-09-15T02:43:13Z WARN  frame_support::migrations] 🚚 Pallet "Privileges" VersionedMigration migration 0->1 can be removed; on-chain is already at StorageVersion(1).
+[2026-09-15T02:43:13Z INFO  runtime::staking] [792074] 💸 Fixed 0 out of 1 cooperators
+[2026-09-15T02:43:13Z INFO  runtime::frame-support] ⚠️ Ethereum declares internal migrations (which *might* execute). On-chain `StorageVersion(0)` vs in-code storage version `NoStorageVersionSet`
+[2026-09-15T02:43:13Z INFO  try_runtime_core::commands::on_runtime_upgrade] Storage root before: 0xb3f31c2eb953410094a268c1104fde1bd645b8434bbf95f203a34121496fab75, after: 0xb3f31c2eb953410094a268c1104fde1bd645b8434bbf95f203a34121496fab75
+[2026-09-15T02:43:13Z INFO  try_runtime_core::commands::on_runtime_upgrade] ✅ Migrations are idempotent
+[2026-09-15T02:43:13Z INFO  try-runtime::cli] ---------------------------------------------------------------------------------------
+    
+    
+[2026-09-15T02:43:13Z INFO  try-runtime::cli] 🔬 TryRuntime_on_runtime_upgrade succeeded! Running it again for weight measurements.
+    
+    
+[2026-09-15T02:43:13Z INFO  try-runtime::cli] ---------------------------------------------------------------------------------------
+    
+    
+[2026-09-15T02:43:35Z INFO  try-runtime::cli] PoV size (zstd-compressed compact proof): 13.3 KiB. For parachains, it's your responsibility to verify that a PoV of this size fits within any relaychain constraints.
+[2026-09-15T02:43:35Z INFO  try-runtime::cli] Consumed ref_time: 0.00515s (0.26% of max 2s)
+[2026-09-15T02:43:35Z INFO  try-runtime::cli] ✅ No weight safety issues detected. Please note this does not guarantee a successful runtime upgrade. Always test your runtime upgrade with recent state, and ensure that the weight usage of your migrations will not drastically differ between testing and actual on-chain execution.
+[2026-09-15T02:43:35Z INFO  try-runtime::cli] -----------------------------------------------------------
+    
+    
+[2026-09-15T02:43:35Z INFO  try-runtime::cli] 🔬 Running Multi-Block-Migrations with checks: PreAndPost
+    
+    
+[2026-09-15T02:43:35Z INFO  try-runtime::cli] -----------------------------------------------------------
+    
+    
+[2026-09-15T02:43:35Z INFO  remote-ext] since no at is provided, setting it to latest finalized head, 0x8b560f44dfbee35086d47ae4f900b7035ffc9c03a0b06d4276105ac3e2ec2f61
+[2026-09-15T02:43:35Z INFO  remote-ext] since no prefix is filtered, the data for all pallets will be downloaded
+[2026-09-15T02:43:35Z INFO  remote-ext] scraping key-pairs from remote at block height 0x8b560f44dfbee35086d47ae4f900b7035ffc9c03a0b06d4276105ac3e2ec2f61
+⏳ Scraping keys...
+[2026-09-15T02:43:35Z INFO  remote-ext] 🔧 Initialized work queue with 16 ranges
+[2026-09-15T02:43:35Z INFO  remote-ext] 🌐 Using 1 RPC provider(s)
+[2026-09-15T02:43:35Z INFO  remote-ext] 🚀 Spawning 4 parallel workers for key fetching
+[2026-09-15T02:43:36Z INFO  remote-ext] 🎉 Parallel key fetching complete: 3662 unique keys
+✅ Found 3662 keys in 0.61s
+[2026-09-15T02:43:36Z INFO  remote-ext] 🔧 Initialized 4 batches for value fetching
+[2026-09-15T02:43:36Z INFO  remote-ext] 🚀 Spawning 4 parallel workers for value fetching
+
+⏳ Inserting keys into DB...
+✅ Inserted keys into DB in 0.03s
+[2026-09-15T02:43:36Z INFO  remote-ext] adding data for hashed prefix: , took 1.01s
+[2026-09-15T02:43:36Z INFO  remote-ext] adding data for hashed key: 3a636f6465
+[2026-09-15T02:43:36Z INFO  remote-ext] adding data for hashed key: 26aa394eea5630e07c48ae0c9558cef7f9cce9c888469bb1a0dceaa129672ef8
+[2026-09-15T02:43:36Z INFO  remote-ext] adding data for hashed key: 26aa394eea5630e07c48ae0c9558cef702a5c1b19ab7a04f536c519aca4983ac
+[2026-09-15T02:43:36Z INFO  remote-ext] 👩‍👦 no child roots found to scrape
+[2026-09-15T02:43:36Z INFO  remote-ext] initialized state externalities with storage root 0x901630848c9d86977b5a99469f9c8df621269227e518da23eda94b871bdb4a66 and state_version V1
+[2026-09-15T02:43:37Z INFO  try-runtime::cli] Original runtime [Name: "vitreus-power-plant"] [Version: 219] [Code hash: 0x39ad...499a]
+[2026-09-15T02:43:38Z INFO  try-runtime::cli] New runtime      [Name: "vitreus-power-plant"] [Version: 220] [Code hash: 0xb492...6b37]
+[2026-09-15T02:44:00Z INFO  try_runtime_core::common::empty_block::production] Producing new empty block at height 792087
+[2026-09-15T02:44:00Z INFO  try_runtime_core::common::empty_block::production] Produced a new block (0xef02b2e4b0d3ffe5b72ceca21d75b69a70f8ba3d145ebada268bb67822c28e74)
+[2026-09-15T02:44:00Z WARN  frame_support::migrations] 🚚 Pallet "VitreusDex" VersionedMigration migration 0->1 can be removed; on-chain is already at StorageVersion(1).
+[2026-09-15T02:44:00Z INFO  frame_support::migrations] 🚚 Pallet "VitreusDex" VersionedMigration migrating storage version from 1 to 2.
+[2026-09-15T02:44:00Z INFO  runtime::vitreus-dex] D8 migration: 4 pools moved to hash-derived accounts
+[2026-09-15T02:44:00Z WARN  frame_support::migrations] 🚚 Pallet "Privileges" VersionedMigration migration 0->1 can be removed; on-chain is already at StorageVersion(1).
+[2026-09-15T02:44:00Z INFO  runtime::staking] [792086] 💸 Fixed 0 out of 1 cooperators
+[2026-09-15T02:44:00Z INFO  runtime::frame-support] ⚠️ Ethereum declares internal migrations (which *might* execute). On-chain `StorageVersion(0)` vs in-code storage version `NoStorageVersionSet`
+[2026-09-15T02:44:00Z INFO  try_runtime_core::common::empty_block::production] Executed the new block
+[2026-09-15T02:44:00Z INFO  try-runtime::cli] MBM ongoing for 1 blocks
+[2026-09-15T02:44:00Z INFO  try_runtime_core::common::empty_block::production] Producing new empty block at height 792088
+[2026-09-15T02:44:00Z INFO  try_runtime_core::common::empty_block::production] Produced a new block (0x7d1a14e9a3daed062c2235789fc4a665d164ba3b18e56e231875cb92cca344cb)
+[2026-09-15T02:44:00Z INFO  try_runtime_core::common::empty_block::production] Executed the new block
+[2026-09-15T02:44:00Z INFO  try-runtime::cli] MBM finished after 1 blocks
+[2026-09-15T02:44:00Z INFO  try-runtime::cli] MBM finished. Executing block one more time.
+[2026-09-15T02:44:00Z INFO  vitreus_power_plant_runtime] try-runtime::on_runtime_upgrade
+[2026-09-15T02:44:00Z WARN  frame_support::migrations] 🚚 Pallet "VitreusDex" VersionedMigration migration 0->1 can be removed; on-chain is already at StorageVersion(2).
+[2026-09-15T02:44:00Z WARN  frame_support::migrations] 🚚 Pallet "VitreusDex" VersionedMigration migration 1->2 can be removed; on-chain is already at StorageVersion(2).
+[2026-09-15T02:44:00Z WARN  frame_support::migrations] 🚚 Pallet "Privileges" VersionedMigration migration 0->1 can be removed; on-chain is already at StorageVersion(1).
+[2026-09-15T02:44:00Z INFO  runtime::staking] [792088] 💸 Fixed 0 out of 1 cooperators
+[2026-09-15T02:44:00Z INFO  runtime::frame-support] ⚠️ Ethereum declares internal migrations (which *might* execute). On-chain `StorageVersion(0)` vs in-code storage version `NoStorageVersionSet`
+[2026-09-15T02:44:01Z INFO  runtime::executive] ✅ Entire runtime state decodes without error. 76559 bytes total.
