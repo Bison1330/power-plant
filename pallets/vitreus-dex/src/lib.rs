@@ -266,7 +266,7 @@ pub mod pallet {
     use frame_support::pallet_prelude::*;
     use frame_system::pallet_prelude::*;
 
-    const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
+    const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
 
     #[pallet::pallet]
     #[pallet::storage_version(STORAGE_VERSION)]
@@ -1894,11 +1894,22 @@ pub mod pallet {
         ///
         /// Deterministic in the pair, so it can be computed before the pool
         /// exists — which is exactly why `seed_reserved_pool_for` sweeps it.
+        ///
+        /// D8 (Finding 13): the seed is `blake2_256` of the pair key, not the
+        /// key itself. `into_sub_account_truncating` keeps only the first
+        /// `size_of::<AccountId>()` bytes of `"modl" ++ PalletId ++ seed`;
+        /// with the raw key as the seed an AccountId20 runtime kept eight
+        /// bytes of it — `04 00 44 01` and the low four bytes of the second
+        /// asset id for a native pair, so chain asset `n` and launch asset
+        /// `2^64 + n` shared one pool account, and for a `(WithId, WithId)`
+        /// pair the second asset never featured at all. Eight bytes of a
+        /// hash do not collide. (Finding 6's length prefixes addressed
+        /// ambiguity *within* the key; the key was then truncated anyway.)
         pub fn pool_account_for(asset_a: T::AssetKind, asset_b: T::AssetKind) -> T::AccountId {
             let pair = Self::canonical_pair(asset_a, asset_b);
-            // Finding 6: length-prefix each asset encoding to avoid truncation collisions.
             let pair_key = (pair.0.encode(), pair.1.encode());
-            PALLET_ID.into_sub_account_truncating(&pair_key)
+            let seed = sp_io::hashing::blake2_256(&pair_key.encode());
+            PALLET_ID.into_sub_account_truncating(seed)
         }
 
         /// Write a fresh, empty pool record for an already-canonical `pair`.
@@ -2610,6 +2621,128 @@ pub mod migrations {
             0,
             1,
             VersionUncheckedMigrateToV1<T>,
+            Pallet<T>,
+            <T as frame_system::Config>::DbWeight,
+        >;
+    }
+
+    /// D8 (v1 → v2): pool accounts are derived from a hash of the pair key
+    /// (Finding 13). Every pool's reserves move from the account the old
+    /// derivation named to the one the new derivation names, and
+    /// `PoolInfo.pool_account` is rewritten. Positions, shares and routing
+    /// are untouched. Fork-only: no chain upstream has a pre-D8 pool.
+    pub mod v2 {
+        use super::*;
+        use frame_support::traits::tokens::{Fortitude::Polite, Preservation::{Expendable, Preserve}};
+
+        /// The pre-D8 derivation, kept here only to find where a pool's
+        /// reserves are.
+        pub fn old_pool_account_for<T: Config>(pair: &(T::AssetKind, T::AssetKind)) -> T::AccountId {
+            let pair_key = (pair.0.encode(), pair.1.encode());
+            PALLET_ID.into_sub_account_truncating(&pair_key)
+        }
+
+        /// Move every unit of `asset` the old account holds to the new one.
+        fn move_all<T: Config>(asset: T::AssetKind, from: &T::AccountId, to: &T::AccountId) -> Result<T::Balance, DispatchError> {
+            let held = T::Assets::reducible_balance(asset.clone(), from, Expendable, Polite);
+            if held.is_zero() {
+                return Ok(held);
+            }
+            T::Assets::transfer(asset, from, to, held, Expendable)
+        }
+
+        /// Unversioned body; wrap in [`MigrateToV2`].
+        pub struct VersionUncheckedMigrateToV2<T>(PhantomData<T>);
+
+        impl<T: Config> UncheckedOnRuntimeUpgrade for VersionUncheckedMigrateToV2<T> {
+            fn on_runtime_upgrade() -> Weight {
+                let mut moved = 0u64;
+                let mut reads = 0u64;
+                let pools: sp_std::vec::Vec<_> = Pools::<T>::iter().collect();
+                for (pair, mut pool) in pools {
+                    reads = reads.saturating_add(1);
+                    let old = old_pool_account_for::<T>(&pair);
+                    let new = Pallet::<T>::pool_account_for(pair.0.clone(), pair.1.clone());
+                    if pool.pool_account != old || old == new {
+                        continue;
+                    }
+                    // A native-quoted pool: the new account must exist before
+                    // it can hold a non-sufficient asset, and the old one
+                    // must have dropped the asset's consumer reference before
+                    // its last native unit can leave. So: most of the native
+                    // (keeping the old account alive), then the asset, then
+                    // the rest of the native. A pool with no native side has
+                    // no such ordering constraint.
+                    let native = T::NativeAsset::get();
+                    let native_side = if pair.0 == native { Some(&pair.0) } else if pair.1 == native { Some(&pair.1) } else { None };
+                    let result: Result<(), DispatchError> = frame_support::storage::with_storage_layer(|| {
+                        if let Some(n) = native_side {
+                            let keep_alive = T::Assets::reducible_balance(n.clone(), &old, Preserve, Polite);
+                            if !keep_alive.is_zero() {
+                                T::Assets::transfer(n.clone(), &old, &new, keep_alive, Preserve)?;
+                            }
+                        }
+                        for a in [&pair.0, &pair.1] {
+                            if Some(a) != native_side {
+                                move_all::<T>(a.clone(), &old, &new)?;
+                            }
+                        }
+                        if let Some(n) = native_side {
+                            move_all::<T>(n.clone(), &old, &new)?;
+                        }
+                        Ok(())
+                    });
+                    match result {
+                        Ok(()) => {
+                            pool.pool_account = new;
+                            Pools::<T>::insert(&pair, pool);
+                            moved = moved.saturating_add(1);
+                        },
+                        Err(e) => {
+                            log::error!(target: "runtime::vitreus-dex", "D8 migration: could not move a pool's reserves ({e:?}); its record still points at the old account");
+                        },
+                    }
+                }
+                log::info!(target: "runtime::vitreus-dex", "D8 migration: {moved} pools moved to hash-derived accounts");
+                T::DbWeight::get().reads_writes(reads.saturating_mul(4), moved.saturating_mul(6))
+            }
+
+            #[cfg(feature = "try-runtime")]
+            fn pre_upgrade() -> Result<sp_std::vec::Vec<u8>, sp_runtime::TryRuntimeError> {
+                // Old accounts must be unique across pools, or the reserves in
+                // a shared account cannot be attributed and this migration
+                // must not run. (That state is the bug itself.)
+                let mut seen = sp_std::vec::Vec::new();
+                for (pair, _) in Pools::<T>::iter() {
+                    let old = old_pool_account_for::<T>(&pair);
+                    frame_support::ensure!(!seen.contains(&old), "two pools share a pre-D8 account");
+                    seen.push(old);
+                }
+                Ok(sp_std::vec::Vec::new())
+            }
+
+            #[cfg(feature = "try-runtime")]
+            fn post_upgrade(_state: sp_std::vec::Vec<u8>) -> Result<(), sp_runtime::TryRuntimeError> {
+                for (pair, pool) in Pools::<T>::iter() {
+                    let new = Pallet::<T>::pool_account_for(pair.0.clone(), pair.1.clone());
+                    frame_support::ensure!(pool.pool_account == new, "a pool still points at its pre-D8 account");
+                    let old = old_pool_account_for::<T>(&pair);
+                    for a in [&pair.0, &pair.1] {
+                        frame_support::ensure!(
+                            T::Assets::reducible_balance(a.clone(), &old, Expendable, Polite).is_zero(),
+                            "a pre-D8 account still holds reserves"
+                        );
+                    }
+                }
+                Ok(())
+            }
+        }
+
+        /// D8 migration, gated on the pallet's on-chain storage version.
+        pub type MigrateToV2<T> = VersionedMigration<
+            1,
+            2,
+            VersionUncheckedMigrateToV2<T>,
             Pallet<T>,
             <T as frame_system::Config>::DbWeight,
         >;
