@@ -2718,11 +2718,13 @@ pub mod migrations {
                     frame_support::ensure!(!seen.contains(&old), "two pools share a pre-D8 account");
                     seen.push(old);
                 }
+                log::info!(target: "runtime::vitreus-dex", "D8 pre_upgrade: {} pools, all pre-D8 accounts distinct", seen.len());
                 Ok(sp_std::vec::Vec::new())
             }
 
             #[cfg(feature = "try-runtime")]
             fn post_upgrade(_state: sp_std::vec::Vec<u8>) -> Result<(), sp_runtime::TryRuntimeError> {
+                let mut n = 0u32;
                 for (pair, pool) in Pools::<T>::iter() {
                     let new = Pallet::<T>::pool_account_for(pair.0.clone(), pair.1.clone());
                     frame_support::ensure!(pool.pool_account == new, "a pool still points at its pre-D8 account");
@@ -2732,8 +2734,15 @@ pub mod migrations {
                             T::Assets::reducible_balance(a.clone(), &old, Expendable, Polite).is_zero(),
                             "a pre-D8 account still holds reserves"
                         );
+                        // The new account holds at least the recorded reserve
+                        // (it also holds uncounted fees, D6).
+                        let held = T::Assets::balance(a.clone(), &new);
+                        let recorded = if *a == pair.0 { pool.reserve_a } else { pool.reserve_b };
+                        frame_support::ensure!(held >= recorded, "a hash-derived account holds less than its pool's recorded reserve");
                     }
+                    n += 1;
                 }
+                log::info!(target: "runtime::vitreus-dex", "D8 post_upgrade: {n} pools at hash-derived accounts holding their reserves; pre-D8 accounts empty");
                 Ok(())
             }
         }
