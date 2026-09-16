@@ -13,6 +13,13 @@ pub type V0213 =
 /// D4: `PoolInfo` gains a fee-routing snapshot; existing pools get zero
 /// routing (100% of fees stay in the pool), including the launchpad pool that
 /// graduated before D4.
+#[cfg(feature = "testnet-runtime")]
+pub type Unreleased = (
+    pallet_vitreus_dex::migrations::v1::MigrateToV1<Runtime>,
+    pallet_vitreus_dex::migrations::v2::MigrateToV2<Runtime>,
+    crate::launch_treasury::FundLaunchTreasuryVault,
+);
+#[cfg(not(feature = "testnet-runtime"))]
 pub type Unreleased = (
     pallet_vitreus_dex::migrations::v1::MigrateToV1<Runtime>,
     pallet_vitreus_dex::migrations::v2::MigrateToV2<Runtime>,
