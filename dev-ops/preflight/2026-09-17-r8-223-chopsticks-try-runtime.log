@@ -17,7 +17,7 @@
    frame_support::migrations   WARN: [1] 🚚 Pallet "Launchpad" VersionedMigration migration 0->1 can be removed; on-chain is already at StorageVersion(1).
    frame_support::migrations   WARN: [1] 🚚 Pallet "LaunchTreasury" VersionedMigration migration 0->1 can be removed; on-chain is already at StorageVersion(1).
    frame_support::migrations   WARN: [1] 🚚 Pallet "Privileges" VersionedMigration migration 0->1 can be removed; on-chain is already at StorageVersion(1).
-            runtime::staking   INFO: [1] [828426] 💸 Fixed 0 out of 2 cooperators
+            runtime::staking   INFO: [1] [828789] 💸 Fixed 0 out of 2 cooperators
       runtime::frame-support  DEBUG: [1] ✅ no migration for System
       runtime::frame-support  DEBUG: [1] ✅ no migration for Timestamp
       runtime::frame-support  DEBUG: [1] ✅ no migration for Babe
@@ -556,7 +556,7 @@
    runtime::try-decode-state  DEBUG: [1] trying to decode pallet: Faucet
    runtime::try-decode-state  DEBUG: [1] trying to decode storage: Faucet::Requests < T >
    runtime::try-decode-state  DEBUG: [1] trying to decode pallet: ManualBridge
-          runtime::executive   INFO: [1] ✅ Entire runtime state decodes without error. 83654 bytes total.
+          runtime::executive   INFO: [1] ✅ Entire runtime state decodes without error. 86526 bytes total.
       runtime::frame-support   INFO: [1] 🩺 Running "System" try-state checks
       runtime::frame-support   INFO: [1] 🩺 Running "Timestamp" try-state checks
       runtime::frame-support   INFO: [1] 🩺 Running "Babe" try-state checks
