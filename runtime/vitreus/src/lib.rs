@@ -894,8 +894,14 @@ const NFTS_BENCH_KEY_TYPE: sp_core::crypto::KeyTypeId = sp_core::crypto::KeyType
 #[cfg(feature = "runtime-benchmarks")]
 pub struct NftsBenchmarkHelper;
 #[cfg(feature = "runtime-benchmarks")]
-impl pallet_nfts::BenchmarkHelper<CollectionId, ItemId, fp_account::EthereumSigner, AccountId, Signature>
-    for NftsBenchmarkHelper
+impl
+    pallet_nfts::BenchmarkHelper<
+        CollectionId,
+        ItemId,
+        fp_account::EthereumSigner,
+        AccountId,
+        Signature,
+    > for NftsBenchmarkHelper
 {
     fn collection(i: u16) -> CollectionId {
         i.into()
@@ -1501,7 +1507,9 @@ pub mod launch_treasury {
             EnergyGeneration::chill(Self::signed(stash))
         }
         fn unbond(stash: &AccountId, value: Balance) -> DispatchResult {
-            EnergyGeneration::unbond(Self::signed(stash), value).map(|_| ()).map_err(|e| e.error)
+            EnergyGeneration::unbond(Self::signed(stash), value)
+                .map(|_| ())
+                .map_err(|e| e.error)
         }
         fn withdraw_unbonded(stash: &AccountId) -> Result<Balance, DispatchError> {
             let before = Self::total(stash);
@@ -1570,7 +1578,11 @@ pub mod launch_treasury {
             .expect("bond validator");
             EnergyGeneration::validate(
                 frame_system::RawOrigin::Signed(who.clone()).into(),
-                ValidatorPrefs { commission: Perbill::zero(), collaborative: true, ..Default::default() },
+                ValidatorPrefs {
+                    commission: Perbill::zero(),
+                    collaborative: true,
+                    ..Default::default()
+                },
             )
             .expect("validate");
             assert!(Self::is_cooperable(&who), "benchmark validator passes the pre-flight filter");
@@ -1593,7 +1605,10 @@ pub mod launch_treasury {
             // `DynamicEnergy::ExchangeRate` is `None` until the first session
             // change computes it from the genesis overrides; run that hook.
             <DynamicEnergy as vitreus_runtime_common::OnSessionChange>::on_new_session(1);
-            assert!(DynamicEnergy::exchange_rate().is_some(), "benchmark genesis yields an LNRG rate");
+            assert!(
+                DynamicEnergy::exchange_rate().is_some(),
+                "benchmark genesis yields an LNRG rate"
+            );
         }
     }
     #[cfg(feature = "runtime-benchmarks")]
