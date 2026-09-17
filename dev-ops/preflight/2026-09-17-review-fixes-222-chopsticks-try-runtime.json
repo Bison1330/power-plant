@@ -1,0 +1,3167 @@
+{
+  "result": "0x03401462a8000b00204aa9d10113ffffffffffffffff",
+  "storageDiff": [
+    [
+      "0x1405f2411d0af5a7ff397e7c9dc68d19ccd77ccc2ae2622977ad8c5852b900f0",
+      "0x00"
+    ],
+    [
+      "0x26aa394eea5630e07c48ae0c9558cef7f9cce9c888469bb1a0dceaa129672ef8",
+      "0x79034c766974726575732d706f7765722d706c616e74"
+    ],
+    [
+      "0x3a657468657265756d5f736368656d61",
+      "0x03"
+    ],
+    [
+      "0x9bca5eb704b7cf9354a196c36aa154d94a4189884c6b8172f0e077084c39f314",
+      "0x00000000000000000000000000000000"
+    ],
+    [
+      "0x9bca5eb704b7cf9354a196c36aa154d94e7b9012096b41c4eb3aaf947f6ea429",
+      "0x0100"
+    ],
+    [
+      "0x9bca5eb704b7cf9354a196c36aa154d9d2108db7b303660fbf8d83a9b6e5dc4e",
+      "0x01"
+    ]
+  ],
+  "offchainStorageDiff": [],
+  "runtimeLogs": [
+    {
+      "message": "try-runtime::on_runtime_upgrade",
+      "level": 2,
+      "target": "vitreus_power_plant_runtime"
+    },
+    {
+      "message": "🚚 Pallet \"VitreusDex\" VersionedMigration migration 0->1 can be removed; on-chain is already at StorageVersion(3).",
+      "level": 1,
+      "target": "frame_support::migrations"
+    },
+    {
+      "message": "🚚 Pallet \"VitreusDex\" VersionedMigration migration 1->2 can be removed; on-chain is already at StorageVersion(3).",
+      "level": 1,
+      "target": "frame_support::migrations"
+    },
+    {
+      "message": "🚚 Pallet \"VitreusDex\" VersionedMigration migration 2->3 can be removed; on-chain is already at StorageVersion(3).",
+      "level": 1,
+      "target": "frame_support::migrations"
+    },
+    {
+      "message": "🚚 Pallet \"Launchpad\" VersionedMigration migration 0->1 can be removed; on-chain is already at StorageVersion(1).",
+      "level": 1,
+      "target": "frame_support::migrations"
+    },
+    {
+      "message": "R1 pre_upgrade: LnrgAccounted 311124066036, vault LNRG 70958120325, 1 treasuries",
+      "level": 2,
+      "target": "runtime::launch-treasury"
+    },
+    {
+      "message": "🚚 Pallet \"LaunchTreasury\" VersionedMigration migrating storage version from 0 to 1.",
+      "level": 2,
+      "target": "frame_support::migrations"
+    },
+    {
+      "message": "R1 recount: LnrgAccounted 311124066036 -> 0 over 1 treasuries (vault holds 70958120325); 70958120325 of stranded rewards become attributable at the next harvest",
+      "level": 2,
+      "target": "runtime::launch-treasury"
+    },
+    {
+      "message": "R1 post_upgrade: LnrgAccounted 0, claims 0, vault LNRG 70958120325",
+      "level": 2,
+      "target": "runtime::launch-treasury"
+    },
+    {
+      "message": "🚚 Pallet \"Privileges\" VersionedMigration migration 0->1 can be removed; on-chain is already at StorageVersion(1).",
+      "level": 1,
+      "target": "frame_support::migrations"
+    },
+    {
+      "message": "[827641] 💸 Fixed 0 out of 2 cooperators",
+      "level": 2,
+      "target": "runtime::staking"
+    },
+    {
+      "message": "✅ no migration for System",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for Timestamp",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for Babe",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for Grandpa",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for Balances",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for Assets",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for AssetRate",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for TransactionPayment",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for Sudo",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for PoolAssets",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for AssetsFreezer",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for EVM",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for EVMChainId",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "⚠️ Ethereum declares internal migrations (which *might* execute). On-chain `StorageVersion(0)` vs in-code storage version `NoStorageVersionSet`",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for HotfixSufficients",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for Nfts",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for Reputation",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for AtomicSwap",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for Claiming",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for Vesting",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for SimpleVesting",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for Kickstart",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for Authorship",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for ImOnline",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for NacManaging",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for EnergyFee",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for Offences",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for Session",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for Utility",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for Historical",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for AuthorityDiscovery",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for EnergyGeneration",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for EnergyBroker",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for Privileges",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for DynamicEnergy",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for VitreusDex",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for Proxy",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for Scheduler",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for Preimage",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for Council",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for TechnicalCommittee",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for TechnicalMembership",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for Treasury",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for TreasuryExtension",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for Bounties",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for Democracy",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for Elections",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for Multisig",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for DemocracyExtension",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for Launchpad",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for TechnicalCommitteeTreasury",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for LaunchTreasury",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for ParachainsOrigin",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for Configuration",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for ParasShared",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for ParaInclusion",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for ParaInherent",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for ParaScheduler",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for Paras",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for Initializer",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for Dmp",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for Hrmp",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for ParaSessionInfo",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for ParasDisputes",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for ParasSlashing",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for ParaAssignmentProvider",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for Registrar",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for Slots",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for ParasSudoWrapper",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for Auctions",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for XcmPallet",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for MessageQueue",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for Beefy",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for Mmr",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for MmrLeaf",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for Faucet",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "✅ no migration for ManualBridge",
+      "level": 3,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "trying to decode pallet: System",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: System::Account < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: System::AllExtrinsicsLen < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: System::AuthorizedUpgrade < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: System::BlockHash < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: System::BlockWeight < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: System::Digest < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: System::EventCount < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: System::EventTopics < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: System::ExecutionPhase < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: System::ExtrinsicCount < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: System::ExtrinsicData < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: System::InherentsApplied < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: System::LastRuntimeUpgrade < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: System::Number < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: System::ParentHash < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: System::UpgradedToTripleRefCount < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: System::UpgradedToU32RefCount < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: Timestamp",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Timestamp::DidUpdate < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Timestamp::Now < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: Babe",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Babe::AuthorVrfRandomness < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Babe::Authorities < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Babe::CurrentSlot < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Babe::EpochConfig < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Babe::EpochIndex < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Babe::EpochStart < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Babe::GenesisSlot < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Babe::Initialized < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Babe::Lateness < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Babe::NextAuthorities < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Babe::NextEpochConfig < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Babe::NextRandomness < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Babe::PendingEpochConfigChange < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Babe::Randomness < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Babe::SegmentIndex < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Babe::SkippedEpochs < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Babe::UnderConstruction < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: Grandpa",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Grandpa::Authorities < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Grandpa::CurrentSetId < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Grandpa::NextForced < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Grandpa::PendingChange < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Grandpa::SetIdSession < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Grandpa::Stalled < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Grandpa::State < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: Balances",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Balances::Account < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Balances::Freezes < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Balances::Holds < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Balances::InactiveIssuance < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Balances::Locks < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Balances::Reserves < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Balances::TotalIssuance < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: Assets",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Assets::Account < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Assets::Approvals < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Assets::Asset < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Assets::Metadata < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Assets::NextAssetId < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: AssetRate",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: AssetRate::ConversionRateToNative < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: TransactionPayment",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: TransactionPayment::NextFeeMultiplier < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: TransactionPayment::StorageVersion < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: Sudo",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Sudo::Key < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: PoolAssets",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: PoolAssets::Account < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: PoolAssets::Approvals < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: PoolAssets::Asset < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: PoolAssets::Metadata < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: PoolAssets::NextAssetId < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: AssetsFreezer",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: AssetsFreezer::Freezes < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: AssetsFreezer::FrozenBalances < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: EVM",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: EVM::AccountCodes < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: EVM::AccountCodesMetadata < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: EVM::AccountStorages < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: EVM::Suicided < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: EVMChainId",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: EVMChainId::ChainId < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: Ethereum",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Ethereum::BlockHash < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Ethereum::CurrentBlock < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Ethereum::CurrentReceipts < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Ethereum::CurrentTransactionStatuses < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Ethereum::Pending < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: HotfixSufficients",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: Nfts",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Nfts::Account < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Nfts::Attribute < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Nfts::Collection < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Nfts::CollectionAccount < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Nfts::CollectionConfigOf < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Nfts::CollectionMetadataOf < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Nfts::CollectionRoleOf < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Nfts::Item < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Nfts::ItemAttributesApprovalsOf < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Nfts::ItemConfigOf < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Nfts::ItemMetadataOf < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Nfts::ItemPriceOf < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Nfts::NextCollectionId < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Nfts::OwnershipAcceptance < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Nfts::PendingSwapOf < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: Reputation",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Reputation::AccountReputation < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: AtomicSwap",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: AtomicSwap::PendingSwaps < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: Claiming",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Claiming::Claims < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Claiming::ClaimsData < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Claiming::Vesting < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: Vesting",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Vesting::StorageVersion < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Vesting::Vesting < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: SimpleVesting",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: SimpleVesting::Vesting < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: Kickstart",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Kickstart::Claims < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Kickstart::ClaimsData < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Kickstart::Vesting < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: Authorship",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Authorship::Author < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: ImOnline",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: ImOnline::AuthoredBlocks < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: ImOnline::HeartbeatAfter < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: ImOnline::Keys < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: ImOnline::ReceivedHeartbeats < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: NacManaging",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: NacManaging::UsersNft < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: EnergyFee",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: EnergyFee::BaseFee < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: EnergyFee::BlockFullnessThreshold < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: EnergyFee::BurnedEnergy < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: EnergyFee::BurnedEnergyThreshold < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: EnergyFee::UpperFeeMultiplier < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: Offences",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Offences::ConcurrentReportsIndex < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Offences::Reports < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: Session",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Session::CurrentIndex < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Session::DisabledValidators < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Session::KeyOwner < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Session::NextKeys < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Session::QueuedChanged < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Session::QueuedKeys < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Session::Validators < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: Utility",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: Historical",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Historical::HistoricalSessions < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Historical::StoredRange < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: AuthorityDiscovery",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: AuthorityDiscovery::Keys < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: AuthorityDiscovery::NextKeys < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: EnergyGeneration",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: EnergyGeneration::ActiveEra < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: EnergyGeneration::BlockAuthoringReward < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: EnergyGeneration::Bonded < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: EnergyGeneration::BondedEras < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: EnergyGeneration::CanceledSlashPayout < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: EnergyGeneration::ChillThreshold < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: EnergyGeneration::Collaborations < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: EnergyGeneration::CooperatorSlashInEra < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: EnergyGeneration::Cooperators < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: EnergyGeneration::CoreNodesCount < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: EnergyGeneration::CurrentEnergyPerStakeCurrency < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: EnergyGeneration::CurrentEra < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: EnergyGeneration::CurrentPlannedSession < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: EnergyGeneration::DisabledValidators < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: EnergyGeneration::ErasEnergyPerStakeCurrency < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: EnergyGeneration::ErasStakers < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: EnergyGeneration::ErasStakersClipped < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: EnergyGeneration::ErasStartSessionIndex < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: EnergyGeneration::ErasTotalStake < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: EnergyGeneration::ErasValidatorPrefs < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: EnergyGeneration::ForceEra < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: EnergyGeneration::Invulnerables < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: EnergyGeneration::Ledger < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: EnergyGeneration::MaxCooperatorsCount < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: EnergyGeneration::MaxValidatorsCount < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: EnergyGeneration::MinCommission < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: EnergyGeneration::MinCommonValidatorBond < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: EnergyGeneration::MinCooperatorBond < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: EnergyGeneration::MinTrustValidatorBond < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: EnergyGeneration::MinimumActiveStake < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: EnergyGeneration::MinimumValidatorCount < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: EnergyGeneration::Payee < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: EnergyGeneration::SlashRewardFraction < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: EnergyGeneration::SlashingSpans < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: EnergyGeneration::SpanSlash < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: EnergyGeneration::UnappliedSlashes < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: EnergyGeneration::ValidatorCount < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: EnergyGeneration::ValidatorSlashInEra < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: EnergyGeneration::Validators < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: EnergyBroker",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: EnergyBroker::EnergyBurn < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: EnergyBroker::EnergyCapacity < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: EnergyBroker::EnergyCapacityOverride < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: EnergyBroker::SessionEnergyBurn < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: EnergyBroker::TotalEnergyBurn < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: Privileges",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Privileges::CurrentDate < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Privileges::Rewards < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Privileges::VipMembers < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Privileges::VipPoints < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Privileges::VippMembers < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Privileges::VippPoints < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: DynamicEnergy",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: DynamicEnergy::AnnualPercentageRate < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: DynamicEnergy::EnergyBurnOverride < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: DynamicEnergy::EnergyGeneration < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: DynamicEnergy::EnergySaleOverride < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: DynamicEnergy::ExchangeRate < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: DynamicEnergy::ExchangeRateParams < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: DynamicEnergy::ExchangeRateSmoothFactor < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: DynamicEnergy::GenerationRateParams < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: DynamicEnergy::GenerationRateSmoothFactor < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: DynamicEnergy::MinimumEnergyGeneration < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: DynamicEnergy::MultiplierCoefficients < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: DynamicEnergy::SessionEnergyBurn < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: DynamicEnergy::SessionEnergySale < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: DynamicEnergy::SessionStartTime < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: DynamicEnergy::TotalStakeOverride < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: VitreusDex",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: VitreusDex::BidWindowBlocks < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: VitreusDex::CreatorFeesUnclaimed < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: VitreusDex::DefaultFeeRouting < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: VitreusDex::FillCommitments < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: VitreusDex::IntentEscrowBalances < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: VitreusDex::Intents < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: VitreusDex::LastSwapBlock < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: VitreusDex::LiquidityPositions < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: VitreusDex::NextIntentId < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: VitreusDex::NextSolverId < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: VitreusDex::Pools < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: VitreusDex::ProtocolFeeRecipient < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: VitreusDex::ProtocolFeesUnclaimed < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: VitreusDex::SettlementWindowBlocks < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: VitreusDex::SolverAccountToId < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: VitreusDex::SolverBondAmount < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: VitreusDex::Solvers < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: VitreusDex::TotalLiquidity < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: Proxy",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Proxy::Announcements < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Proxy::Proxies < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: Scheduler",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Scheduler::Agenda < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Scheduler::IncompleteSince < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Scheduler::Lookup < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Scheduler::Retries < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: Preimage",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Preimage::PreimageFor < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Preimage::RequestStatusFor < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Preimage::StatusFor < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: Council",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Council::Members < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Council::Prime < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Council::ProposalCount < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Council::ProposalOf < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Council::Proposals < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Council::Voting < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: TechnicalCommittee",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: TechnicalCommittee::Members < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: TechnicalCommittee::Prime < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: TechnicalCommittee::ProposalCount < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: TechnicalCommittee::ProposalOf < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: TechnicalCommittee::Proposals < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: TechnicalCommittee::Voting < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: TechnicalMembership",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: TechnicalMembership::Members < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: TechnicalMembership::Prime < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: Treasury",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Treasury::Approvals < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Treasury::Deactivated < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Treasury::ProposalCount < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Treasury::Proposals < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Treasury::SpendCount < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Treasury::Spends < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: TreasuryExtension",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: TreasuryExtension::FeeRecyclingRate < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: Bounties",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Bounties::Bounties < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Bounties::BountyApprovals < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Bounties::BountyCount < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Bounties::BountyDescriptions < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: Democracy",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Democracy::Blacklist < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Democracy::Cancellations < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Democracy::DepositOf < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Democracy::LastTabledWasExternal < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Democracy::LowestUnbaked < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Democracy::MetadataOf < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Democracy::NextExternal < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Democracy::PublicPropCount < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Democracy::PublicProps < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Democracy::ReferendumCount < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Democracy::ReferendumInfoOf < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Democracy::VotingOf < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: Elections",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Elections::Candidates < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Elections::ElectionRounds < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Elections::Members < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Elections::RunnersUp < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Elections::Voting < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: Multisig",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Multisig::Multisigs < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: DemocracyExtension",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: DemocracyExtension::Electorate < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: Launchpad",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Launchpad::AssetToLaunch < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Launchpad::CreationPaused < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Launchpad::Curves < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Launchpad::Launches < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Launchpad::Metadata < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Launchpad::NextLaunchId < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Launchpad::Params < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: TechnicalCommitteeTreasury",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: TechnicalCommitteeTreasury::Approvals < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: TechnicalCommitteeTreasury::Deactivated < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: TechnicalCommitteeTreasury::ProposalCount < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: TechnicalCommitteeTreasury::Proposals < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: TechnicalCommitteeTreasury::SpendCount < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: TechnicalCommitteeTreasury::Spends < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: LaunchTreasury",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: LaunchTreasury::CooperationStale < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: LaunchTreasury::LnrgAccounted < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: LaunchTreasury::LnrgPerShare < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: LaunchTreasury::RetiringQueue < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: LaunchTreasury::Targets < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: LaunchTreasury::Terms < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: LaunchTreasury::TotalShares < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: LaunchTreasury::Treasuries < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: LaunchTreasury::VaultFunded < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: ParachainsOrigin",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: Configuration",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Configuration::ActiveConfig < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Configuration::BypassConsistencyCheck < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Configuration::PendingConfigs < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: ParasShared",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: ParasShared::ActiveValidatorIndices < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: ParasShared::ActiveValidatorKeys < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: ParasShared::AllowedRelayParents < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: ParasShared::CurrentSessionIndex < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: ParaInclusion",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: ParaInclusion::PendingAvailability < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: ParaInherent",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: ParaInherent::Included < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: ParaInherent::OnChainVotes < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: ParaScheduler",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: ParaScheduler::AvailabilityCores < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: ParaScheduler::ClaimQueue < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: ParaScheduler::SessionStartBlock < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: ParaScheduler::ValidatorGroups < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: Paras",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Paras::ActionsQueue < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Paras::CodeByHash < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Paras::CodeByHashRefs < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Paras::CurrentCodeHash < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Paras::FutureCodeHash < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Paras::FutureCodeUpgrades < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Paras::FutureCodeUpgradesAt < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Paras::Heads < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Paras::MostRecentContext < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Paras::ParaLifecycles < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Paras::Parachains < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Paras::PastCodeHash < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Paras::PastCodeMeta < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Paras::PastCodePruning < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Paras::PvfActiveVoteList < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Paras::PvfActiveVoteMap < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Paras::UpcomingParasGenesis < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Paras::UpcomingUpgrades < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Paras::UpgradeCooldowns < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Paras::UpgradeGoAheadSignal < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Paras::UpgradeRestrictionSignal < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: Initializer",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Initializer::BufferedSessionChanges < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Initializer::HasInitialized < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: Dmp",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Dmp::DeliveryFeeFactor < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Dmp::DownwardMessageQueueHeads < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Dmp::DownwardMessageQueues < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: Hrmp",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Hrmp::HrmpAcceptedChannelRequestCount < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Hrmp::HrmpChannelContents < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Hrmp::HrmpChannelDigests < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Hrmp::HrmpChannels < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Hrmp::HrmpCloseChannelRequests < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Hrmp::HrmpCloseChannelRequestsList < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Hrmp::HrmpEgressChannelsIndex < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Hrmp::HrmpIngressChannelsIndex < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Hrmp::HrmpOpenChannelRequestCount < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Hrmp::HrmpOpenChannelRequests < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Hrmp::HrmpOpenChannelRequestsList < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Hrmp::HrmpWatermarks < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: ParaSessionInfo",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: ParaSessionInfo::AccountKeys < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: ParaSessionInfo::AssignmentKeysUnsafe < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: ParaSessionInfo::EarliestStoredSession < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: ParaSessionInfo::SessionExecutorParams < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: ParaSessionInfo::Sessions < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: ParasDisputes",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: ParasDisputes::BackersOnDisputes < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: ParasDisputes::Disputes < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: ParasDisputes::Frozen < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: ParasDisputes::Included < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: ParasDisputes::LastPrunedSession < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: ParasSlashing",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: ParasSlashing::UnappliedSlashes < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: ParasSlashing::ValidatorSetCounts < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: ParaAssignmentProvider",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: Registrar",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Registrar::NextFreeParaId < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Registrar::Paras < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Registrar::PendingSwap < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: Slots",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Slots::Leases < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: ParasSudoWrapper",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: Auctions",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Auctions::AuctionCounter < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Auctions::AuctionInfo < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Auctions::ReservedAmounts < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Auctions::Winning < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: XcmPallet",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: XcmPallet::AssetTraps < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: XcmPallet::CurrentMigration < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: XcmPallet::LockedFungibles < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: XcmPallet::Queries < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: XcmPallet::QueryCounter < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: XcmPallet::RecordedXcm < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: XcmPallet::RemoteLockedFungibles < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: XcmPallet::SafeXcmVersion < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: XcmPallet::ShouldRecordXcm < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: XcmPallet::SupportedVersion < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: XcmPallet::VersionDiscoveryQueue < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: XcmPallet::VersionNotifiers < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: XcmPallet::VersionNotifyTargets < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: XcmPallet::XcmExecutionSuspended < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: MessageQueue",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: MessageQueue::BookStateFor < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: MessageQueue::Pages < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: MessageQueue::ServiceHead < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: Beefy",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Beefy::Authorities < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Beefy::GenesisBlock < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Beefy::NextAuthorities < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Beefy::SetIdSession < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Beefy::ValidatorSetId < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: Mmr",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Mmr::Nodes < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Mmr::NumberOfLeaves < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Mmr::RootHash < T, I >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: MmrLeaf",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: MmrLeaf::BeefyAuthorities < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: MmrLeaf::BeefyNextAuthorities < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: Faucet",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode storage: Faucet::Requests < T >",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "trying to decode pallet: ManualBridge",
+      "level": 3,
+      "target": "runtime::try-decode-state"
+    },
+    {
+      "message": "✅ Entire runtime state decodes without error. 84978 bytes total.",
+      "level": 2,
+      "target": "runtime::executive"
+    },
+    {
+      "message": "🩺 Running \"System\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"Timestamp\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"Babe\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"Grandpa\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"Balances\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"Assets\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"AssetRate\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"TransactionPayment\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"Sudo\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"PoolAssets\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"AssetsFreezer\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"EVM\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"EVMChainId\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"Ethereum\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"HotfixSufficients\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"Nfts\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"Reputation\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"AtomicSwap\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"Claiming\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"Vesting\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"SimpleVesting\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"Kickstart\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"Authorship\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"ImOnline\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"NacManaging\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"EnergyFee\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"Offences\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"Session\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"Utility\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"Historical\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"AuthorityDiscovery\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"EnergyGeneration\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"EnergyBroker\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"Privileges\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"DynamicEnergy\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"VitreusDex\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"Proxy\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"Scheduler\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"Preimage\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"Council\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"TechnicalCommittee\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"TechnicalMembership\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"Treasury\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"TreasuryExtension\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"Bounties\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"Democracy\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"Elections\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"Multisig\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"DemocracyExtension\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"Launchpad\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"TechnicalCommitteeTreasury\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"LaunchTreasury\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"ParachainsOrigin\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"Configuration\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"ParasShared\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"ParaInclusion\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"ParaInherent\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"ParaScheduler\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"Paras\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"Initializer\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"Dmp\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"Hrmp\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"ParaSessionInfo\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"ParasDisputes\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"ParasSlashing\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"ParaAssignmentProvider\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"Registrar\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"Slots\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"ParasSudoWrapper\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"Auctions\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"XcmPallet\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"MessageQueue\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"Beefy\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"Mmr\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"MmrLeaf\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"Faucet\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    },
+    {
+      "message": "🩺 Running \"ManualBridge\" try-state checks",
+      "level": 2,
+      "target": "runtime::frame-support"
+    }
+  ]
+}
