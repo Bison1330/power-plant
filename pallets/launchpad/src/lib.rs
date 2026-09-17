@@ -1202,7 +1202,10 @@ pub mod migrations {
         impl<T: Config> UncheckedOnRuntimeUpgrade for VersionUncheckedMigrateToV1<T> {
             fn on_runtime_upgrade() -> Weight {
                 let now = frame_system::Pallet::<T>::block_number();
-                let params = Params::<T>::translate::<OldLaunchParams<BalanceOf<T>>, _>(|old| {
+                // Absent (a chain still on the runtime default) stays absent:
+                // `get()` then answers the new default, treasury share included.
+                let params_set = Params::<T>::exists();
+                let _ = Params::<T>::translate::<OldLaunchParams<BalanceOf<T>>, _>(|old| {
                     old.map(|o| LaunchParams {
                         graduation_target: o.graduation_target,
                         curve_fee_bps: o.curve_fee_bps,
@@ -1251,7 +1254,7 @@ pub mod migrations {
                 log::info!(
                     target: "runtime::launchpad",
                     "L1 migration: {launches} launches and {curves} curves re-encoded with treasury_share_bps = 0; governance params {}",
-                    if params.is_ok() { "re-encoded" } else { "not set (default stays)" }
+                    if params_set { "re-encoded with treasury_share_bps = 0" } else { "not set: the runtime default applies, treasury share included" }
                 );
                 T::DbWeight::get().reads_writes(launches.saturating_add(curves).saturating_add(1), launches.saturating_add(curves).saturating_add(1))
             }
@@ -1261,13 +1264,14 @@ pub mod migrations {
                 let launches = Launches::<T>::iter_keys().count() as u32;
                 let curves = Curves::<T>::iter_keys().count() as u32;
                 let next = NextLaunchId::<T>::get();
-                log::info!(target: "runtime::launchpad", "L1 pre_upgrade: {launches} launches, {curves} curves, next id {next}");
-                Ok((launches, curves, next).encode())
+                let params_set = Params::<T>::exists();
+                log::info!(target: "runtime::launchpad", "L1 pre_upgrade: {launches} launches, {curves} curves, next id {next}, governance params set: {params_set}");
+                Ok((launches, curves, next, params_set).encode())
             }
 
             #[cfg(feature = "try-runtime")]
             fn post_upgrade(state: sp_std::vec::Vec<u8>) -> Result<(), sp_runtime::TryRuntimeError> {
-                let (launches, curves, next): (u32, u32, LaunchId) = Decode::decode(&mut &state[..]).map_err(|_| "pre_upgrade state")?;
+                let (launches, curves, next, params_set): (u32, u32, LaunchId, bool) = Decode::decode(&mut &state[..]).map_err(|_| "pre_upgrade state")?;
                 let now = frame_system::Pallet::<T>::block_number();
                 let mut nl = 0u32;
                 for (_id, l) in Launches::<T>::iter() {
@@ -1283,9 +1287,12 @@ pub mod migrations {
                 frame_support::ensure!(nl == launches && nc == curves, "every launch and curve decodes after L1");
                 frame_support::ensure!(NextLaunchId::<T>::get() == next, "next id untouched");
                 let p = Params::<T>::get();
-                frame_support::ensure!(p.treasury_share_bps == 0, "governance params carry treasury_share_bps = 0 until set_params");
+                frame_support::ensure!(Params::<T>::exists() == params_set, "params stay set or stay absent");
+                if params_set {
+                    frame_support::ensure!(p.treasury_share_bps == 0, "stored governance params carry treasury_share_bps = 0 until set_params");
+                }
                 frame_support::ensure!(Pallet::<T>::validate_params(&p).is_ok(), "governance params still valid");
-                log::info!(target: "runtime::launchpad", "L1 post_upgrade: {nl} launches and {nc} curves decode; params protocol {} / treasury 0", p.protocol_share_bps);
+                log::info!(target: "runtime::launchpad", "L1 post_upgrade: {nl} launches and {nc} curves decode; params ({}) protocol {} / treasury {}", if params_set { "stored" } else { "runtime default" }, p.protocol_share_bps, p.treasury_share_bps);
                 Ok(())
             }
         }

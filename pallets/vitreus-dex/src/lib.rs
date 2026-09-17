@@ -2955,11 +2955,13 @@ pub mod migrations {
                         routing: widen(old.routing),
                     })
                 });
-                let default = DefaultFeeRouting::<T>::translate::<OldFeeRouting, _>(|old| Some(widen(old.unwrap_or_default())));
+                // Absent stays absent: `get()` answers zero routing either way.
+                let default_set = DefaultFeeRouting::<T>::exists();
+                let _ = DefaultFeeRouting::<T>::translate::<OldFeeRouting, _>(|old| old.map(widen));
                 log::info!(
                     target: "runtime::vitreus-dex",
                     "D9 migration: {count} pools re-encoded with treasury_bps = 0; default routing {}",
-                    if default.is_ok() { "re-encoded" } else { "could not be decoded and was reset to zero" }
+                    if default_set { "re-encoded with treasury_bps = 0" } else { "not set (zero)" }
                 );
                 T::DbWeight::get().reads_writes(count.saturating_add(1), count.saturating_add(1))
             }
@@ -2968,9 +2970,9 @@ pub mod migrations {
             fn pre_upgrade() -> Result<sp_std::vec::Vec<u8>, sp_runtime::TryRuntimeError> {
                 // Values do not decode as the new type yet; keys do.
                 let pools = Pools::<T>::iter_keys().count() as u32;
-                let old_default = DefaultFeeRouting::<T>::try_get().is_ok();
-                log::info!(target: "runtime::vitreus-dex", "D9 pre_upgrade: {pools} pools to re-encode; default routing readable as old shape: {}", old_default);
-                Ok((pools, old_default).encode())
+                let default_set = DefaultFeeRouting::<T>::exists();
+                log::info!(target: "runtime::vitreus-dex", "D9 pre_upgrade: {pools} pools to re-encode; default routing set: {default_set}");
+                Ok((pools, default_set).encode())
             }
 
             #[cfg(feature = "try-runtime")]
