@@ -336,7 +336,7 @@ pub mod pallet {
     /// of every stored `PoolInfo`, so on the fork it is v3 with a migration
     /// (`migrations::v3`); the submission branch, which no chain with v1
     /// pools targets, carries D9 as its v2 without one.
-    const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
+    const STORAGE_VERSION: StorageVersion = StorageVersion::new(3);
 
     #[pallet::pallet]
     #[pallet::storage_version(STORAGE_VERSION)]
@@ -2899,6 +2899,102 @@ pub mod migrations {
             1,
             2,
             VersionUncheckedMigrateToV2<T>,
+            Pallet<T>,
+            <T as frame_system::Config>::DbWeight,
+        >;
+    }
+
+    /// D9 (v2 → v3): `FeeRouting` gains `treasury_bps`, which sits inside
+    /// every stored `PoolInfo` and in `DefaultFeeRouting`, so every record
+    /// is re-encoded. Existing pools and the default get `treasury_bps = 0`:
+    /// a live pool's split is its snapshot (the D4 rule), and the default is
+    /// governance's to set with `set_default_fee_routing`. `LastSwapBlock` is
+    /// a new map and needs nothing. Fork-only: the submission's D9 is its v2
+    /// and no chain it targets has a pre-D9 pool.
+    pub mod v3 {
+        use super::*;
+
+        /// `FeeRouting` as stored before D9.
+        #[derive(Encode, Decode, Default)]
+        #[allow(missing_docs)]
+        pub struct OldFeeRouting {
+            pub protocol_bps: u16,
+            pub creator_bps: u16,
+        }
+
+        /// `PoolInfo` as stored before D9.
+        #[derive(Encode, Decode)]
+        #[allow(missing_docs)]
+        pub struct OldPoolInfo<Balance, AccountId> {
+            pub reserve_a: Balance,
+            pub reserve_b: Balance,
+            pub fee_tier: u32,
+            pub total_fees_collected: Balance,
+            pub pool_account: AccountId,
+            pub routing: OldFeeRouting,
+        }
+
+        fn widen(old: OldFeeRouting) -> FeeRouting {
+            FeeRouting { protocol_bps: old.protocol_bps, creator_bps: old.creator_bps, treasury_bps: 0 }
+        }
+
+        /// Unversioned body; wrap in [`MigrateToV3`].
+        pub struct VersionUncheckedMigrateToV3<T>(PhantomData<T>);
+
+        impl<T: Config> UncheckedOnRuntimeUpgrade for VersionUncheckedMigrateToV3<T> {
+            fn on_runtime_upgrade() -> Weight {
+                let mut count = 0u64;
+                Pools::<T>::translate::<OldPoolInfo<T::Balance, T::AccountId>, _>(|_pair, old| {
+                    count = count.saturating_add(1);
+                    Some(PoolInfo {
+                        reserve_a: old.reserve_a,
+                        reserve_b: old.reserve_b,
+                        fee_tier: old.fee_tier,
+                        total_fees_collected: old.total_fees_collected,
+                        pool_account: old.pool_account,
+                        routing: widen(old.routing),
+                    })
+                });
+                let default = DefaultFeeRouting::<T>::translate::<OldFeeRouting, _>(|old| Some(widen(old.unwrap_or_default())));
+                log::info!(
+                    target: "runtime::vitreus-dex",
+                    "D9 migration: {count} pools re-encoded with treasury_bps = 0; default routing {}",
+                    if default.is_ok() { "re-encoded" } else { "could not be decoded and was reset to zero" }
+                );
+                T::DbWeight::get().reads_writes(count.saturating_add(1), count.saturating_add(1))
+            }
+
+            #[cfg(feature = "try-runtime")]
+            fn pre_upgrade() -> Result<sp_std::vec::Vec<u8>, sp_runtime::TryRuntimeError> {
+                // Values do not decode as the new type yet; keys do.
+                let pools = Pools::<T>::iter_keys().count() as u32;
+                let old_default = DefaultFeeRouting::<T>::try_get().is_ok();
+                log::info!(target: "runtime::vitreus-dex", "D9 pre_upgrade: {pools} pools to re-encode; default routing readable as old shape: {}", old_default);
+                Ok((pools, old_default).encode())
+            }
+
+            #[cfg(feature = "try-runtime")]
+            fn post_upgrade(state: sp_std::vec::Vec<u8>) -> Result<(), sp_runtime::TryRuntimeError> {
+                let (pools, _): (u32, bool) = Decode::decode(&mut &state[..]).map_err(|_| "pre_upgrade state")?;
+                let mut n = 0u32;
+                for (_pair, pool) in Pools::<T>::iter() {
+                    n = n.saturating_add(1);
+                    frame_support::ensure!(pool.routing.treasury_bps == 0, "every pre-D9 pool carries treasury_bps = 0");
+                    frame_support::ensure!(pool.routing.is_valid_for(pool.fee_tier), "routing still fits the tier");
+                }
+                frame_support::ensure!(n == pools, "every pool decodes after D9");
+                let d = DefaultFeeRouting::<T>::get();
+                frame_support::ensure!(d.treasury_bps == 0, "default routing carries treasury_bps = 0 until governance sets it");
+                log::info!(target: "runtime::vitreus-dex", "D9 post_upgrade: {n} pools decode with treasury_bps = 0; default routing protocol {} / creator {} / treasury 0", d.protocol_bps, d.creator_bps);
+                Ok(())
+            }
+        }
+
+        /// D9 migration, gated on the pallet's on-chain storage version.
+        pub type MigrateToV3<T> = VersionedMigration<
+            2,
+            3,
+            VersionUncheckedMigrateToV3<T>,
             Pallet<T>,
             <T as frame_system::Config>::DbWeight,
         >;

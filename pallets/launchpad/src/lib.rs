@@ -1119,3 +1119,184 @@ pub mod pallet {
         }
     }
 }
+
+/// Fork-only storage migrations. The submission branch ships these shapes
+/// as its v1 with no migration, since no chain it targets has a v0 launch;
+/// the fork's dev chain has five.
+pub mod migrations {
+    use super::*;
+    use frame_support::{
+        migrations::VersionedMigration,
+        traits::{Get, UncheckedOnRuntimeUpgrade},
+        weights::Weight,
+    };
+    use sp_std::marker::PhantomData;
+
+    /// L1 (v0 → v1): `LaunchParams` and `CurveParams` gain
+    /// `treasury_share_bps`; `CurveState` gains `treasury_fees_paid` and
+    /// `last_trade_block`. Every stored `Params`, `Launches` and `Curves`
+    /// record is re-encoded.
+    ///
+    /// Existing launches get `treasury_share_bps = 0` — a launch's terms are
+    /// its snapshot (LAUNCHPAD_SPEC §1.4), and the treasury's share is a term.
+    /// The governance `Params` get 0 too, for governance to raise with
+    /// `set_params`. `last_trade_block` becomes the curve's last known
+    /// event — `graduated_at`, else `completed_at`, else the block this runs
+    /// in — so a dormancy clock (LAUNCH_TREASURY_SPEC §6.5) can only start
+    /// from the upgrade, never earlier.
+    pub mod v1 {
+        use super::*;
+
+        /// `LaunchParams` as stored before L1.
+        #[derive(Encode, Decode)]
+        #[allow(missing_docs)]
+        pub struct OldLaunchParams<Balance> {
+            pub graduation_target: Balance,
+            pub curve_fee_bps: u16,
+            pub protocol_share_bps: u16,
+            pub pool_fee_tier: u32,
+            pub creation_fee: Balance,
+        }
+
+        /// `CurveParams` as stored before L1.
+        #[derive(Encode, Decode)]
+        #[allow(missing_docs)]
+        pub struct OldCurveParams<Balance> {
+            pub graduation_target: Balance,
+            pub virtual_quote: Balance,
+            pub curve_fee_bps: u16,
+            pub protocol_share_bps: u16,
+            pub pool_fee_tier: u32,
+        }
+
+        /// `Launch` as stored before L1.
+        #[derive(Encode, Decode)]
+        #[allow(missing_docs)]
+        pub struct OldLaunch<T: Config> {
+            pub asset_id: AssetIdOf<T>,
+            pub creator: T::AccountId,
+            pub creator_fee_recipient: T::AccountId,
+            pub escrow: T::AccountId,
+            pub created_at: BlockNumberFor<T>,
+            pub curve: OldCurveParams<BalanceOf<T>>,
+            pub params_hash: T::Hash,
+        }
+
+        /// `CurveState` as stored before L1.
+        #[derive(Encode, Decode)]
+        #[allow(missing_docs)]
+        pub struct OldCurveState<T: Config> {
+            pub phase: Phase,
+            pub real_quote: BalanceOf<T>,
+            pub tokens_remaining: BalanceOf<T>,
+            pub creator_fees_unclaimed: BalanceOf<T>,
+            pub protocol_fees_paid: BalanceOf<T>,
+            pub completed_at: Option<BlockNumberFor<T>>,
+            pub graduated_at: Option<BlockNumberFor<T>>,
+            pub lp_shares: BalanceOf<T>,
+        }
+
+        /// Unversioned body; wrap in [`MigrateToV1`].
+        pub struct VersionUncheckedMigrateToV1<T>(PhantomData<T>);
+
+        impl<T: Config> UncheckedOnRuntimeUpgrade for VersionUncheckedMigrateToV1<T> {
+            fn on_runtime_upgrade() -> Weight {
+                let now = frame_system::Pallet::<T>::block_number();
+                let params = Params::<T>::translate::<OldLaunchParams<BalanceOf<T>>, _>(|old| {
+                    old.map(|o| LaunchParams {
+                        graduation_target: o.graduation_target,
+                        curve_fee_bps: o.curve_fee_bps,
+                        protocol_share_bps: o.protocol_share_bps,
+                        treasury_share_bps: 0,
+                        pool_fee_tier: o.pool_fee_tier,
+                        creation_fee: o.creation_fee,
+                    })
+                });
+                let mut launches = 0u64;
+                Launches::<T>::translate::<OldLaunch<T>, _>(|_id, old| {
+                    launches = launches.saturating_add(1);
+                    Some(Launch {
+                        asset_id: old.asset_id,
+                        creator: old.creator,
+                        creator_fee_recipient: old.creator_fee_recipient,
+                        escrow: old.escrow,
+                        created_at: old.created_at,
+                        curve: CurveParams {
+                            graduation_target: old.curve.graduation_target,
+                            virtual_quote: old.curve.virtual_quote,
+                            curve_fee_bps: old.curve.curve_fee_bps,
+                            protocol_share_bps: old.curve.protocol_share_bps,
+                            treasury_share_bps: 0,
+                            pool_fee_tier: old.curve.pool_fee_tier,
+                        },
+                        params_hash: old.params_hash,
+                    })
+                });
+                let mut curves = 0u64;
+                Curves::<T>::translate::<OldCurveState<T>, _>(|_id, old| {
+                    curves = curves.saturating_add(1);
+                    Some(CurveState {
+                        phase: old.phase,
+                        real_quote: old.real_quote,
+                        tokens_remaining: old.tokens_remaining,
+                        creator_fees_unclaimed: old.creator_fees_unclaimed,
+                        protocol_fees_paid: old.protocol_fees_paid,
+                        treasury_fees_paid: Zero::zero(),
+                        last_trade_block: old.graduated_at.or(old.completed_at).unwrap_or(now),
+                        completed_at: old.completed_at,
+                        graduated_at: old.graduated_at,
+                        lp_shares: old.lp_shares,
+                    })
+                });
+                log::info!(
+                    target: "runtime::launchpad",
+                    "L1 migration: {launches} launches and {curves} curves re-encoded with treasury_share_bps = 0; governance params {}",
+                    if params.is_ok() { "re-encoded" } else { "not set (default stays)" }
+                );
+                T::DbWeight::get().reads_writes(launches.saturating_add(curves).saturating_add(1), launches.saturating_add(curves).saturating_add(1))
+            }
+
+            #[cfg(feature = "try-runtime")]
+            fn pre_upgrade() -> Result<sp_std::vec::Vec<u8>, sp_runtime::TryRuntimeError> {
+                let launches = Launches::<T>::iter_keys().count() as u32;
+                let curves = Curves::<T>::iter_keys().count() as u32;
+                let next = NextLaunchId::<T>::get();
+                log::info!(target: "runtime::launchpad", "L1 pre_upgrade: {launches} launches, {curves} curves, next id {next}");
+                Ok((launches, curves, next).encode())
+            }
+
+            #[cfg(feature = "try-runtime")]
+            fn post_upgrade(state: sp_std::vec::Vec<u8>) -> Result<(), sp_runtime::TryRuntimeError> {
+                let (launches, curves, next): (u32, u32, LaunchId) = Decode::decode(&mut &state[..]).map_err(|_| "pre_upgrade state")?;
+                let now = frame_system::Pallet::<T>::block_number();
+                let mut nl = 0u32;
+                for (_id, l) in Launches::<T>::iter() {
+                    nl = nl.saturating_add(1);
+                    frame_support::ensure!(l.curve.treasury_share_bps == 0, "every pre-L1 launch carries treasury_share_bps = 0");
+                }
+                let mut nc = 0u32;
+                for (_id, c) in Curves::<T>::iter() {
+                    nc = nc.saturating_add(1);
+                    frame_support::ensure!(c.treasury_fees_paid.is_zero(), "no treasury fee was paid before L1");
+                    frame_support::ensure!(c.last_trade_block <= now, "last_trade_block is in the past");
+                }
+                frame_support::ensure!(nl == launches && nc == curves, "every launch and curve decodes after L1");
+                frame_support::ensure!(NextLaunchId::<T>::get() == next, "next id untouched");
+                let p = Params::<T>::get();
+                frame_support::ensure!(p.treasury_share_bps == 0, "governance params carry treasury_share_bps = 0 until set_params");
+                frame_support::ensure!(Pallet::<T>::validate_params(&p).is_ok(), "governance params still valid");
+                log::info!(target: "runtime::launchpad", "L1 post_upgrade: {nl} launches and {nc} curves decode; params protocol {} / treasury 0", p.protocol_share_bps);
+                Ok(())
+            }
+        }
+
+        /// L1 migration, gated on the pallet's on-chain storage version.
+        pub type MigrateToV1<T> = VersionedMigration<
+            0,
+            1,
+            VersionUncheckedMigrateToV1<T>,
+            Pallet<T>,
+            <T as frame_system::Config>::DbWeight,
+        >;
+    }
+}

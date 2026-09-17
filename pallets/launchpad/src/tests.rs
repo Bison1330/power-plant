@@ -1518,3 +1518,94 @@ fn l2_buy_for_runs_the_hook_and_can_graduate() {
         );
     });
 }
+
+/// Fork-only: launches, curves and the governance params written before L1
+/// re-encode with `treasury_share_bps = 0`, `treasury_fees_paid = 0` and a
+/// `last_trade_block` no later than the migration block.
+#[test]
+fn l1_migration_v1_re_encodes_pre_l1_launches_curves_and_params() {
+    use crate::migrations::v1::{MigrateToV1, OldCurveParams, OldCurveState, OldLaunch, OldLaunchParams};
+    use frame_support::{
+        storage::unhashed,
+        traits::{GetStorageVersion, OnRuntimeUpgrade, StorageVersion},
+    };
+    use parity_scale_codec::Encode;
+
+    new_test_ext().execute_with(|| {
+        // One trading launch, one graduated.
+        let a = create(ALICE);
+        buy(BOB, a, 10 * UNIT);
+        let g = create(ALICE);
+        cross(BOB, g);
+        let now = System::block_number();
+
+        // Rewind every record to the pre-L1 shape, raw.
+        let p = Params::<Test>::get();
+        unhashed::put(
+            &Params::<Test>::hashed_key(),
+            &OldLaunchParams { graduation_target: p.graduation_target, curve_fee_bps: p.curve_fee_bps, protocol_share_bps: p.protocol_share_bps + p.treasury_share_bps, pool_fee_tier: p.pool_fee_tier, creation_fee: p.creation_fee },
+        );
+        for id in [a, g] {
+            let l = Launches::<Test>::get(id).unwrap();
+            unhashed::put(
+                &Launches::<Test>::hashed_key_for(id),
+                &OldLaunch::<Test> {
+                    asset_id: l.asset_id,
+                    creator: l.creator.clone(),
+                    creator_fee_recipient: l.creator_fee_recipient.clone(),
+                    escrow: l.escrow.clone(),
+                    created_at: l.created_at,
+                    curve: OldCurveParams {
+                        graduation_target: l.curve.graduation_target,
+                        virtual_quote: l.curve.virtual_quote,
+                        curve_fee_bps: l.curve.curve_fee_bps,
+                        protocol_share_bps: l.curve.protocol_share_bps + l.curve.treasury_share_bps,
+                        pool_fee_tier: l.curve.pool_fee_tier,
+                    },
+                    params_hash: l.params_hash,
+                },
+            );
+            let c = Curves::<Test>::get(id).unwrap();
+            unhashed::put(
+                &Curves::<Test>::hashed_key_for(id),
+                &OldCurveState::<Test> {
+                    phase: c.phase,
+                    real_quote: c.real_quote,
+                    tokens_remaining: c.tokens_remaining,
+                    creator_fees_unclaimed: c.creator_fees_unclaimed,
+                    protocol_fees_paid: c.protocol_fees_paid,
+                    completed_at: c.completed_at,
+                    graduated_at: c.graduated_at,
+                    lp_shares: c.lp_shares,
+                },
+            );
+        }
+        StorageVersion::new(0).put::<Launchpad>();
+        // The new shape cannot read the old bytes: that is the outage the migration prevents.
+        assert!(Launches::<Test>::try_get(a).is_err() || Curves::<Test>::try_get(a).is_err() || Launches::<Test>::get(a).unwrap().encode() != unhashed::get_raw(&Launches::<Test>::hashed_key_for(a)).unwrap());
+
+        MigrateToV1::<Test>::on_runtime_upgrade();
+
+        assert_eq!(Launchpad::on_chain_storage_version(), StorageVersion::new(1));
+        assert_eq!(Params::<Test>::get().treasury_share_bps, 0);
+        assert!(Launchpad::validate_params(&Params::<Test>::get()).is_ok());
+        for id in [a, g] {
+            let l = Launches::<Test>::get(id).expect("launch decodes");
+            assert_eq!(l.curve.treasury_share_bps, 0);
+            let c = Curves::<Test>::get(id).expect("curve decodes");
+            assert_eq!(c.treasury_fees_paid, 0);
+            assert!(c.last_trade_block <= now);
+        }
+        // The trading launch's clock starts at the migration; the graduated
+        // one's at its graduation.
+        assert_eq!(Curves::<Test>::get(a).unwrap().last_trade_block, now);
+        assert_eq!(Curves::<Test>::get(g).unwrap().last_trade_block, Curves::<Test>::get(g).unwrap().graduated_at.unwrap());
+        // The launch still trades under its snapshot: a buy routes nothing to a treasury.
+        buy(BOB, a, 1 * UNIT);
+        assert_eq!(Curves::<Test>::get(a).unwrap().treasury_fees_paid, 0);
+
+        // Idempotent at version 1.
+        MigrateToV1::<Test>::on_runtime_upgrade();
+        assert_eq!(Launches::<Test>::get(a).unwrap().curve.treasury_share_bps, 0);
+    });
+}

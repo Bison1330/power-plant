@@ -13,16 +13,23 @@ pub type V0213 =
 /// D4: `PoolInfo` gains a fee-routing snapshot; existing pools get zero
 /// routing (100% of fees stay in the pool), including the launchpad pool that
 /// graduated before D4.
+// 221: the launch treasury. D9 re-encodes every pool (DEX v2 → v3) and L1
+// every launch (launchpad v0 → v1) before the vault is funded, so the sinks
+// the treasury reads exist in their new shape first. v1 and v2 are already
+// on chain (219, 220) and skip themselves.
 #[cfg(feature = "testnet-runtime")]
 pub type Unreleased = (
     pallet_vitreus_dex::migrations::v1::MigrateToV1<Runtime>,
     pallet_vitreus_dex::migrations::v2::MigrateToV2<Runtime>,
+    pallet_vitreus_dex::migrations::v3::MigrateToV3<Runtime>,
+    pallet_launchpad::migrations::v1::MigrateToV1<Runtime>,
     crate::launch_treasury::FundLaunchTreasuryVault,
 );
 #[cfg(not(feature = "testnet-runtime"))]
 pub type Unreleased = (
     pallet_vitreus_dex::migrations::v1::MigrateToV1<Runtime>,
     pallet_vitreus_dex::migrations::v2::MigrateToV2<Runtime>,
+    pallet_vitreus_dex::migrations::v3::MigrateToV3<Runtime>,
 );
 
 pub struct InitTechnicalCommitteeTreasury;

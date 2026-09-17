@@ -2167,3 +2167,46 @@ fn d9_swap_for_native_reserves_and_last_swap_block() {
         );
     });
 }
+
+/// Fork-only: a pool and the default routing written before D9 re-encode
+/// with `treasury_bps = 0`; the pool keeps its split and its reserves.
+#[test]
+fn d9_migration_v3_widens_routing_on_every_pool_and_the_default() {
+    use crate::migrations::v3::{MigrateToV3, OldFeeRouting, OldPoolInfo};
+    use crate::DefaultFeeRouting;
+    use frame_support::{
+        storage::unhashed,
+        traits::{GetStorageVersion, OnRuntimeUpgrade, StorageVersion},
+    };
+
+    new_test_ext().execute_with(|| {
+        assert_ok!(VitreusDex::set_default_fee_routing(RuntimeOrigin::root(), 5, 5, 0));
+        assert_ok!(VitreusDex::create_pool(RuntimeOrigin::root(), native(), usdc(), 3));
+        assert_ok!(VitreusDex::add_liquidity(RuntimeOrigin::signed(ALICE), native(), usdc(), 1_000_000, 10_000, 0, 0));
+        let pair = VitreusDex::canonical_pair(native(), usdc());
+        let pool = Pools::<Test>::get(pair.clone()).unwrap();
+
+        // Rewind to the pre-D9 shape, raw, at storage version 2.
+        unhashed::put(
+            &Pools::<Test>::hashed_key_for(pair.clone()),
+            &OldPoolInfo { reserve_a: pool.reserve_a, reserve_b: pool.reserve_b, fee_tier: pool.fee_tier, total_fees_collected: pool.total_fees_collected, pool_account: pool.pool_account, routing: OldFeeRouting { protocol_bps: 5, creator_bps: 5 } },
+        );
+        unhashed::put(&DefaultFeeRouting::<Test>::hashed_key(), &OldFeeRouting { protocol_bps: 5, creator_bps: 5 });
+        StorageVersion::new(2).put::<VitreusDex>();
+        assert!(Pools::<Test>::try_get(pair.clone()).is_err(), "the new shape cannot read the old bytes");
+
+        MigrateToV3::<Test>::on_runtime_upgrade();
+
+        assert_eq!(VitreusDex::on_chain_storage_version(), StorageVersion::new(3));
+        let migrated = Pools::<Test>::get(pair.clone()).expect("pool decodes");
+        assert_eq!(migrated.routing, FeeRouting { protocol_bps: 5, creator_bps: 5, treasury_bps: 0 });
+        assert_eq!((migrated.reserve_a, migrated.reserve_b, migrated.pool_account), (pool.reserve_a, pool.reserve_b, pool.pool_account));
+        assert_eq!(DefaultFeeRouting::<Test>::get(), FeeRouting { protocol_bps: 5, creator_bps: 5, treasury_bps: 0 });
+        // The pool trades under its snapshot.
+        assert_ok!(VitreusDex::swap_exact_tokens_for_tokens(RuntimeOrigin::signed(BOB), native(), usdc(), 1_000, 0, BOB));
+
+        // Idempotent at version 3.
+        MigrateToV3::<Test>::on_runtime_upgrade();
+        assert_eq!(Pools::<Test>::get(pair).unwrap().routing.treasury_bps, 0);
+    });
+}
