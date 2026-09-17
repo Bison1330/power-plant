@@ -56,7 +56,7 @@
       "target": "frame_support::migrations"
     },
     {
-      "message": "[828032] 💸 Fixed 0 out of 2 cooperators",
+      "message": "[828426] 💸 Fixed 0 out of 2 cooperators",
       "level": 2,
       "target": "runtime::staking"
     },
@@ -2751,7 +2751,7 @@
       "target": "runtime::try-decode-state"
     },
     {
-      "message": "✅ Entire runtime state decodes without error. 88078 bytes total.",
+      "message": "✅ Entire runtime state decodes without error. 83654 bytes total.",
       "level": 2,
       "target": "runtime::executive"
     },
