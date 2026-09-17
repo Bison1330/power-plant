@@ -1,0 +1,103 @@
+🚧 EXPERIMENTAL FEATURE 🚧
+
+
+--------------------------------------------------------------------------------
+	Current runtime spec_name: vitreus-power-plant, spec_version: 220
+	New runtime spec_name: vitreus-power-plant, spec_version: 221
+--------------------------------------------------------------------------------
+
+
+ vitreus_power_plant_runtime   INFO: [1] try-runtime::on_runtime_upgrade
+      runtime::frame-support   INFO: [1] 🐥 New pallet "LaunchTreasury" detected in the runtime. Initializing the on-chain storage version to match the storage version defined in the pallet: StorageVersion(0)
+   frame_support::migrations   WARN: [1] 🚚 Pallet "VitreusDex" VersionedMigration migration 0->1 can be removed; on-chain is already at StorageVersion(2).
+   frame_support::migrations   WARN: [1] 🚚 Pallet "VitreusDex" VersionedMigration migration 1->2 can be removed; on-chain is already at StorageVersion(2).
+        runtime::vitreus-dex   INFO: [1] D9 pre_upgrade: 4 pools to re-encode; default routing set: false
+   frame_support::migrations   INFO: [1] 🚚 Pallet "VitreusDex" VersionedMigration migrating storage version from 2 to 3.
+        runtime::vitreus-dex   INFO: [1] D9 migration: 4 pools re-encoded with treasury_bps = 0; default routing not set (zero)
+        runtime::vitreus-dex   INFO: [1] D9 post_upgrade: 4 pools decode with treasury_bps = 0; default routing protocol 0 / creator 0 / treasury 0
+          runtime::launchpad   INFO: [1] L1 pre_upgrade: 5 launches, 5 curves, next id 5, governance params set: false
+   frame_support::migrations   INFO: [1] 🚚 Pallet "Launchpad" VersionedMigration migrating storage version from 0 to 1.
+          runtime::launchpad   INFO: [1] L1 migration: 5 launches and 5 curves re-encoded with treasury_share_bps = 0; governance params not set: the runtime default applies, treasury share included
+          runtime::launchpad   INFO: [1] L1 post_upgrade: 5 launches and 5 curves decode; params (runtime default) protocol 2500 / treasury 2500
+    runtime::launch-treasury   INFO: [1] vault funded: Err(Token(NotExpendable))
+   frame_support::migrations   WARN: [1] 🚚 Pallet "Privileges" VersionedMigration migration 0->1 can be removed; on-chain is already at StorageVersion(1).
+            runtime::staking   INFO: [1] [820184] 💸 Fixed 0 out of 1 cooperators
+      runtime::frame-support   INFO: [1] ⚠️ Ethereum declares internal migrations (which *might* execute). On-chain `StorageVersion(0)` vs in-code storage version `NoStorageVersionSet`
+          runtime::executive   INFO: [1] ✅ Entire runtime state decodes without error. 75919 bytes total.
+      runtime::frame-support   INFO: [1] 🩺 Running "System" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "Timestamp" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "Babe" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "Grandpa" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "Balances" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "Assets" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "AssetRate" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "TransactionPayment" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "Sudo" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "PoolAssets" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "AssetsFreezer" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "EVM" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "EVMChainId" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "Ethereum" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "HotfixSufficients" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "Nfts" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "Reputation" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "AtomicSwap" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "Claiming" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "Vesting" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "SimpleVesting" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "Kickstart" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "Authorship" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "ImOnline" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "NacManaging" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "EnergyFee" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "Offences" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "Session" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "Utility" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "Historical" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "AuthorityDiscovery" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "EnergyGeneration" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "EnergyBroker" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "Privileges" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "DynamicEnergy" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "VitreusDex" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "Proxy" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "Scheduler" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "Preimage" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "Council" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "TechnicalCommittee" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "TechnicalMembership" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "Treasury" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "TreasuryExtension" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "Bounties" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "Democracy" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "Elections" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "Multisig" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "DemocracyExtension" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "Launchpad" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "TechnicalCommitteeTreasury" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "LaunchTreasury" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "ParachainsOrigin" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "Configuration" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "ParasShared" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "ParaInclusion" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "ParaInherent" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "ParaScheduler" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "Paras" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "Initializer" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "Dmp" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "Hrmp" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "ParaSessionInfo" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "ParasDisputes" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "ParasSlashing" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "ParaAssignmentProvider" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "Registrar" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "Slots" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "ParasSudoWrapper" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "Auctions" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "XcmPallet" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "MessageQueue" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "Beefy" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "Mmr" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "MmrLeaf" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "Faucet" try-state checks
+      runtime::frame-support   INFO: [1] 🩺 Running "ManualBridge" try-state checks
