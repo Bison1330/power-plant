@@ -2088,7 +2088,7 @@ fn l1_migration_v1_re_encodes_pre_l1_launches_curves_and_params() {
             Curves::<Test>::get(g).unwrap().graduated_at.unwrap()
         );
         // The launch still trades under its snapshot: a buy routes nothing to a treasury.
-        buy(BOB, a, 1 * UNIT);
+        buy(BOB, a, UNIT);
         assert_eq!(Curves::<Test>::get(a).unwrap().treasury_fees_paid, 0);
 
         // Idempotent at version 1.

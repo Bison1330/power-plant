@@ -2014,16 +2014,16 @@ fn d8_migration_v2_moves_reserves_to_the_hash_derived_account() {
         Pools::<Test>::mutate(pair.clone(), |p| p.as_mut().unwrap().pool_account = old);
         StorageVersion::new(1).put::<VitreusDex>();
         assert_eq!(Balances::free_balance(old), 1_000_000);
-        assert_eq!(Assets::balance(USDC_ID, &old), 10_000);
+        assert_eq!(Assets::balance(USDC_ID, old), 10_000);
 
         MigrateToV2::<Test>::on_runtime_upgrade();
 
         let pool = Pools::<Test>::get(pair.clone()).unwrap();
         assert_eq!(pool.pool_account, new);
         assert_eq!(Balances::free_balance(new), 1_000_000);
-        assert_eq!(Assets::balance(USDC_ID, &new), 10_000);
+        assert_eq!(Assets::balance(USDC_ID, new), 10_000);
         assert_eq!(Balances::free_balance(old), 0);
-        assert_eq!(Assets::balance(USDC_ID, &old), 0);
+        assert_eq!(Assets::balance(USDC_ID, old), 0);
         assert_eq!((pool.reserve_a, pool.reserve_b), (1_000_000, 10_000));
         assert_eq!(VitreusDex::on_chain_storage_version(), StorageVersion::new(2));
 
