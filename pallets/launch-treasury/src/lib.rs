@@ -162,7 +162,8 @@ pub mod pallet {
     use frame_support::pallet_prelude::*;
     use frame_system::pallet_prelude::*;
 
-    const STORAGE_VERSION: StorageVersion = StorageVersion::new(0);
+    /// 1 on the fork: `migrations::v1` recounted `LnrgAccounted` after R1.
+    const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
 
     #[pallet::pallet]
     #[pallet::storage_version(STORAGE_VERSION)]
@@ -440,7 +441,7 @@ pub mod pallet {
             <T as pallet_launchpad::Config>::NativeAssetKind::get()
         }
 
-        fn assets_balance(asset: AssetKindOf<T>, who: &T::AccountId) -> BalanceOf<T> {
+        pub(crate) fn assets_balance(asset: AssetKindOf<T>, who: &T::AccountId) -> BalanceOf<T> {
             <<T as pallet_vitreus_dex::Config>::Assets as FungiblesInspect<T::AccountId>>::balance(asset, who)
         }
 
@@ -1037,5 +1038,77 @@ pub mod pallet {
             });
             Self::deposit_event(Event::FeeNoted { launch_id, amount });
         }
+    }
+}
+
+/// Fork-only migrations (LAUNCH_TREASURY_SPEC §10.12): what a running chain
+/// needs and the submission must not carry.
+pub mod migrations {
+    use super::*;
+    use frame_support::{
+        migrations::VersionedMigration,
+        traits::UncheckedOnRuntimeUpgrade,
+        weights::Weight,
+    };
+    use sp_std::marker::PhantomData;
+
+    /// v0 → v1 (R1): recount `LnrgAccounted`. Under v0 a sale did not lower
+    /// it, so it overstated the attributed LNRG in the vault by everything
+    /// ever sold, and `harvest` attributed nothing until new rewards had
+    /// covered that gap — those rewards were owned by no launch. Every
+    /// launch's own claim (`lnrg_accrued` plus its unsettled share of the
+    /// accumulator) was tracked correctly throughout, so their sum is the
+    /// right value: attributed LNRG still in the vault, up to accumulator
+    /// dust. Set it to that; the next `harvest` attributes every stranded
+    /// era to the launches holding shares then. Nothing moves; one key.
+    pub mod v1 {
+        use super::*;
+
+        pub struct VersionUncheckedMigrateToV1<T>(PhantomData<T>);
+        impl<T: Config> UncheckedOnRuntimeUpgrade for VersionUncheckedMigrateToV1<T> {
+            fn on_runtime_upgrade() -> Weight {
+                let before = LnrgAccounted::<T>::get();
+                let mut claims = BalanceOf::<T>::zero();
+                let mut n = 0u64;
+                for (id, _) in Treasuries::<T>::iter() {
+                    claims = claims.saturating_add(Pallet::<T>::claimable_lnrg(id).unwrap_or_default());
+                    n += 1;
+                }
+                let held = Pallet::<T>::assets_balance(T::LnrgAsset::get(), &Pallet::<T>::vault());
+                let after = claims.min(held);
+                LnrgAccounted::<T>::put(after);
+                log::info!(
+                    target: "runtime::launch-treasury",
+                    "R1 recount: LnrgAccounted {:?} -> {:?} over {} treasuries (vault holds {:?}); {:?} of stranded rewards become attributable at the next harvest",
+                    before, after, n, held, held.saturating_sub(after),
+                );
+                T::DbWeight::get().reads_writes(n.saturating_add(3), 1)
+            }
+
+            #[cfg(feature = "try-runtime")]
+            fn pre_upgrade() -> Result<Vec<u8>, sp_runtime::TryRuntimeError> {
+                let held = Pallet::<T>::assets_balance(T::LnrgAsset::get(), &Pallet::<T>::vault());
+                log::info!(target: "runtime::launch-treasury", "R1 pre_upgrade: LnrgAccounted {:?}, vault LNRG {:?}, {} treasuries", LnrgAccounted::<T>::get(), held, Treasuries::<T>::iter().count());
+                Ok(held.encode())
+            }
+
+            #[cfg(feature = "try-runtime")]
+            fn post_upgrade(state: Vec<u8>) -> Result<(), sp_runtime::TryRuntimeError> {
+                let held_before: BalanceOf<T> = Decode::decode(&mut &state[..]).map_err(|_| "decode")?;
+                let held = Pallet::<T>::assets_balance(T::LnrgAsset::get(), &Pallet::<T>::vault());
+                frame_support::ensure!(held == held_before, "R1 post_upgrade: the vault's LNRG moved");
+                let accounted = LnrgAccounted::<T>::get();
+                frame_support::ensure!(accounted <= held, "R1 post_upgrade: LnrgAccounted above the vault's LNRG");
+                let mut claims = BalanceOf::<T>::zero();
+                for (id, _) in Treasuries::<T>::iter() {
+                    claims = claims.saturating_add(Pallet::<T>::claimable_lnrg(id).unwrap_or_default());
+                }
+                frame_support::ensure!(claims <= accounted, "R1 post_upgrade: claims above LnrgAccounted");
+                log::info!(target: "runtime::launch-treasury", "R1 post_upgrade: LnrgAccounted {:?}, claims {:?}, vault LNRG {:?}", accounted, claims, held);
+                Ok(())
+            }
+        }
+
+        pub type MigrateToV1<T> = VersionedMigration<0, 1, VersionUncheckedMigrateToV1<T>, Pallet<T>, <T as frame_system::Config>::DbWeight>;
     }
 }

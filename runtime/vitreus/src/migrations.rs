@@ -17,6 +17,9 @@ pub type V0213 =
 // every launch (launchpad v0 → v1) before the vault is funded, so the sinks
 // the treasury reads exist in their new shape first. v1 and v2 are already
 // on chain (219, 220) and skip themselves.
+// 222: the review's seven fixes (pallets/REVIEW_2026-09-17.md). R1 needs a
+// recount of LnrgAccounted on a chain that sold under the old rule; the
+// rest change no storage shape.
 #[cfg(feature = "testnet-runtime")]
 pub type Unreleased = (
     pallet_vitreus_dex::migrations::v1::MigrateToV1<Runtime>,
@@ -24,6 +27,7 @@ pub type Unreleased = (
     pallet_vitreus_dex::migrations::v3::MigrateToV3<Runtime>,
     pallet_launchpad::migrations::v1::MigrateToV1<Runtime>,
     crate::launch_treasury::FundLaunchTreasuryVault,
+    pallet_launch_treasury::migrations::v1::MigrateToV1<Runtime>,
 );
 #[cfg(not(feature = "testnet-runtime"))]
 pub type Unreleased = (

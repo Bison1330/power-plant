@@ -1180,3 +1180,36 @@ fn r7_burn_impact_is_bounded_under_the_venues_round_trip_fee() {
         assert!(bound < term, "the term (200 bps → {term}) did not apply");
     });
 }
+
+// ---- fork-only migration ----------------------------------------------------
+
+/// v1: the R1 recount. A chain that sold under the old rule has
+/// `LnrgAccounted` above what any launch can claim; after the recount it is
+/// their sum, and the next harvest attributes the stranded rewards.
+#[test]
+fn m_v1_recount_makes_stranded_rewards_attributable() {
+    new_test_ext().execute_with(|| {
+        let a = graduated_with_volume(ALICE, 10);
+        assert_ok!(stake(a));
+        fund_broker(10_000 * UNIT);
+        pay_rewards(100 * UNIT);
+        assert_ok!(LaunchTreasury::harvest(origin(KEEPER)));
+        run_to(now() + BURN_INTERVAL);
+        assert_ok!(compound(a));
+        // What the old code left behind: accounted still at the harvested balance.
+        let sold = 100 * UNIT - treasury(a).lnrg_accrued;
+        LnrgAccounted::<Test>::mutate(|x| *x += sold);
+        pay_rewards(30 * UNIT);
+        // Stranded under v0: nothing to attribute although 30 LNRG arrived.
+        assert_noop!(LaunchTreasury::harvest(origin(KEEPER)), Error::<Test>::NothingToDo);
+
+        frame_support::traits::StorageVersion::new(0).put::<LaunchTreasury>();
+        use frame_support::traits::OnRuntimeUpgrade;
+        let _ = migrations::v1::MigrateToV1::<Test>::on_runtime_upgrade();
+        assert_eq!(frame_support::traits::StorageVersion::get::<LaunchTreasury>(), 1);
+        assert_eq!(LnrgAccounted::<Test>::get(), LaunchTreasury::claimable_lnrg(a).unwrap());
+        assert_ok!(LaunchTreasury::harvest(origin(KEEPER)));
+        assert!(LaunchTreasury::claimable_lnrg(a).unwrap() >= 30 * UNIT - 100, "the 30 LNRG are the launch's now");
+        ok_state();
+    });
+}
