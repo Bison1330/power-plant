@@ -269,7 +269,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
     // 214 is taken by upstream PR #99 (VTRS as EVM native currency); this
     // runtime adds pallet-launchpad on top of 213 and skips to 215 so the two
     // never share a number.
-    spec_version: 224,
+    spec_version: 225,
     impl_version: 0,
     apis: RUNTIME_API_VERSIONS,
     transaction_version: 4,
@@ -1700,15 +1700,18 @@ pub mod launch_treasury {
             if frame_system::Pallet::<Runtime>::providers(&escrow) > 0 {
                 return <Runtime as frame_system::Config>::DbWeight::get().reads(1);
             }
+            // Mint the ED, as the from-genesis `GenesisConfig` does, rather than
+            // transfer from the Treasury: the Treasury's transferable balance can
+            // be fully locked (the dry run against live state hit `Token(Frozen)`),
+            // and this account has no funding elsewhere to draw on. The ED is
+            // 100 µVTRS; the one-off issuance bump is negligible and symmetric
+            // with the genesis path.
             let ed = <Runtime as pallet_balances::Config>::ExistentialDeposit::get();
-            let res = <Balances as frame_support::traits::fungible::Mutate<AccountId>>::transfer(
-                &xcm_config::TreasuryAccount::get(),
-                &escrow,
-                ed,
-                frame_support::traits::tokens::Preservation::Preserve,
+            let res = <Balances as frame_support::traits::fungible::Mutate<AccountId>>::mint_into(
+                &escrow, ed,
             );
             log::info!(target: "runtime::vitreus-dex", "fee escrow funded: {:?}", res.map(|_| ()));
-            <Runtime as frame_system::Config>::DbWeight::get().reads_writes(2, 2)
+            <Runtime as frame_system::Config>::DbWeight::get().reads_writes(1, 2)
         }
     }
 }
