@@ -28,6 +28,7 @@ pub type Unreleased = (
     pallet_launchpad::migrations::v1::MigrateToV1<Runtime>,
     crate::launch_treasury::FundLaunchTreasuryVault,
     pallet_launch_treasury::migrations::v1::MigrateToV1<Runtime>,
+    crate::launch_treasury::FundDexFeeEscrow,
 );
 #[cfg(not(feature = "testnet-runtime"))]
 pub type Unreleased = (

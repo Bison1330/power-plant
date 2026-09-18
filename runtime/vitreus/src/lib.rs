@@ -1686,6 +1686,31 @@ pub mod launch_treasury {
             <Runtime as frame_system::Config>::DbWeight::get().reads_writes(3, 4)
         }
     }
+
+    /// Funds the DEX fee escrow with its existential deposit once, from the
+    /// Treasury, so every routed protocol/creator slice — even one below ED —
+    /// reaches it from the first swap rather than being left in the pool
+    /// (vitreus-dex SECURITY_AUDIT Finding 14). The `do_swap` guard makes
+    /// correctness independent of this; it closes the "before the first ≥ED fee"
+    /// window on the upgrade path, the DEX `GenesisConfig` on the genesis path.
+    pub struct FundDexFeeEscrow;
+    impl frame_support::traits::OnRuntimeUpgrade for FundDexFeeEscrow {
+        fn on_runtime_upgrade() -> Weight {
+            let escrow = VitreusDex::fee_escrow_account();
+            if frame_system::Pallet::<Runtime>::providers(&escrow) > 0 {
+                return <Runtime as frame_system::Config>::DbWeight::get().reads(1);
+            }
+            let ed = <Runtime as pallet_balances::Config>::ExistentialDeposit::get();
+            let res = <Balances as frame_support::traits::fungible::Mutate<AccountId>>::transfer(
+                &xcm_config::TreasuryAccount::get(),
+                &escrow,
+                ed,
+                frame_support::traits::tokens::Preservation::Preserve,
+            );
+            log::info!(target: "runtime::vitreus-dex", "fee escrow funded: {:?}", res.map(|_| ()));
+            <Runtime as frame_system::Config>::DbWeight::get().reads_writes(2, 2)
+        }
+    }
 }
 
 parameter_types! {
