@@ -8,7 +8,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- Reproducible runtime builds: `runtime/vitreus/build.rs` remaps the workspace, cargo home and toolchain sysroot paths in the wasm build, and the documented recipe builds at `/build` so the hash matches across machines (see README, "Reproducing a runtime wasm")
+- Fork CI (`.github/workflows/fork-ci.yml`): node build, tests, chain-spec check and clippy for both native features on every push; runtime wasm sha256 in the job summary
+
 - Add energy conversion from LNRG and SNRG to VNRG
+
+### Fixed
+
+- `node/chain-spec` did not compile after `pallet-vitreus-dex` gained a `GenesisConfig` (missing `vitreus_dex` field in both genesis builders)
 
 ### Changed
 

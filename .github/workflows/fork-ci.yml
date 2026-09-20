@@ -1,0 +1,118 @@
+# Fork CI. Upstream's basic-pipeline.yml runs only on pull requests into
+# develop/testnet/stagenet/mainnet, so on this fork it never runs at all;
+# 9c14dcf broke node/chain-spec for five days without anyone noticing
+# because nothing here compiled the node. This runs the same gate as
+# upstream's Code Hygiene job on every push, for both native features,
+# and adds the checks that would have caught that break: chain-spec for
+# each feature, and the runtime wasm hash so an auditor can compare a
+# deployed runtime against the source without reproducing the build.
+name: Fork CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  hygiene:
+    name: ${{ matrix.feature }} — build, test, chain-spec, clippy
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        feature: [testnet-native, mainnet-native]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: System dependencies
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libclang-dev libssl-dev cmake
+
+      - name: Toolchain (rust-toolchain.toml)
+        run: rustup show
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.feature }}
+
+      # The two genesis literals in node/chain-spec/src/lib.rs are exhaustive;
+      # every pallet that gains a GenesisConfig needs a field there. Cheapest
+      # place to fail.
+      - name: chain-spec compiles
+        run: cargo check --locked -p chain-spec --features ${{ matrix.feature }}
+
+      - name: Node builds (the handoff command, debug profile)
+        run: cargo build --locked --features ${{ matrix.feature }}
+
+      - name: Tests
+        run: cargo test --workspace --locked --features ${{ matrix.feature }}
+
+      - name: Clippy
+        run: cargo clippy --workspace --locked --all-targets --features ${{ matrix.feature }} -- --deny warnings
+
+  format:
+    name: rustfmt (nightly, as upstream)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup toolchain add nightly --profile minimal --component rustfmt
+      - run: cargo +nightly fmt -- --check
+
+  runtime-wasm:
+    name: ${{ matrix.runtime }} runtime wasm sha256
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        runtime: [testnet-runtime, mainnet-runtime]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: System dependencies
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libclang-dev libssl-dev cmake
+
+      - name: Toolchain (rust-toolchain.toml)
+        run: rustup show
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: wasm-${{ matrix.runtime }}
+
+      - name: Build runtime
+        run: cargo build --release --locked -p vitreus-power-plant-runtime --features ${{ matrix.runtime }}
+
+      # runtime/vitreus/build.rs remaps the workspace, cargo home and sysroot,
+      # so this hash must equal a local build of the same commit from any
+      # directory. If it does not, the remap regressed.
+      - name: Hash
+        run: |
+          set -euo pipefail
+          name=$(echo "${{ matrix.runtime }}" | sed 's/-runtime//')
+          wasm="target/release/wbuild/vitreus-power-plant-runtime/vitreus_power_plant_${name}_runtime.compact.compressed.wasm"
+          spec=$(grep -oE 'spec_version: [0-9]+' runtime/vitreus/src/lib.rs | head -1 | grep -oE '[0-9]+')
+          sum=$(sha256sum "$wasm" | cut -d' ' -f1)
+          echo "$sum  $(basename "$wasm")" | tee "${wasm}.sha256"
+          {
+            echo "### ${{ matrix.runtime }} — spec_version $spec — commit ${GITHUB_SHA::7}"
+            echo '```'
+            echo "$sum  $(basename "$wasm")"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.runtime }}-${{ github.sha }}
+          path: |
+            target/release/wbuild/vitreus-power-plant-runtime/*.compact.compressed.wasm
+            target/release/wbuild/vitreus-power-plant-runtime/*.compact.compressed.wasm.sha256
+          if-no-files-found: error
