@@ -1203,7 +1203,7 @@ impl frame_support::traits::Contains<NativeOrAssetId> for LaunchpadReservedAsset
     fn contains(asset: &NativeOrAssetId) -> bool {
         match asset {
             NativeOrAssetId::WithId(id) => {
-                let id = u128::from(*id);
+                let id = *id;
                 (LAUNCHPAD_ASSET_ID_START..LAUNCHPAD_ASSET_ID_END).contains(&id)
             },
             NativeOrAssetId::Native => false,
@@ -1451,7 +1451,7 @@ pub mod launch_treasury {
                 .and_then(pallet_energy_generation::Ledger::<Runtime>::get)
         }
         fn signed(stash: &AccountId) -> RuntimeOrigin {
-            frame_system::RawOrigin::Signed(stash.clone()).into()
+            frame_system::RawOrigin::Signed(*stash).into()
         }
     }
     impl TreasuryStaking<AccountId, Balance> for EnergyGenerationStaking {
@@ -1491,9 +1491,9 @@ pub mod launch_treasury {
         fn bond(stash: &AccountId, value: Balance) -> DispatchResult {
             EnergyGeneration::bond(
                 Self::signed(stash),
-                stash.clone(),
+                *stash,
                 value,
-                pallet_energy_generation::RewardDestination::Account(stash.clone()),
+                pallet_energy_generation::RewardDestination::Account(*stash),
             )
         }
         fn bond_extra(stash: &AccountId, value: Balance) -> DispatchResult {
@@ -1548,11 +1548,11 @@ pub mod launch_treasury {
             min_native: Balance,
         ) -> Result<Balance, DispatchError> {
             <EnergyBroker as vitreus_runtime_common::Swap<AccountId>>::swap_exact_tokens_for_tokens(
-                who.clone(),
+                *who,
                 vec![LnrgAssetKind::get(), NativeOrAssetId::Native],
                 lnrg,
                 Some(min_native),
-                who.clone(),
+                *who,
                 true,
             )
         }
