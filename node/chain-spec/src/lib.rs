@@ -371,6 +371,8 @@ pub fn testnet_genesis(
             next_asset_id: Default::default(),
         },
         pool_assets: Default::default(),
+        // Finding 14 (9c14dcf): the DEX genesis endows its fee escrow with ED; no fields to set.
+        vitreus_dex: Default::default(),
         reputation: ReputationConfig {
             accounts: stakers
                 .iter()
@@ -530,6 +532,8 @@ fn mainnet_genesis(
             next_asset_id: Default::default(),
         },
         pool_assets: Default::default(),
+        // Finding 14 (9c14dcf): the DEX genesis endows its fee escrow with ED; no fields to set.
+        vitreus_dex: Default::default(),
         reputation: ReputationConfig {
             accounts: stakers
                 .iter()
