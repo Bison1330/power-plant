@@ -88,13 +88,22 @@ jobs:
         with:
           key: wasm-${{ matrix.runtime }}
 
+      # cargo hashes each workspace crate's absolute path into -C metadata,
+      # which changes symbol hashes and, through codegen, the code itself, so
+      # the runtime is only reproducible from a fixed path. /build is the
+      # srtool convention and what the README recipe uses.
+      - name: Mount workspace at /build
+        run: sudo mkdir -p /build && sudo mount --bind "$GITHUB_WORKSPACE" /build
+
       - name: Build runtime
+        working-directory: /build
         run: cargo build --release --locked -p vitreus-power-plant-runtime --features ${{ matrix.runtime }}
 
-      # runtime/vitreus/build.rs remaps the workspace, cargo home and sysroot,
-      # so this hash must equal a local build of the same commit from any
-      # directory. If it does not, the remap regressed.
+      # This hash must equal a local build of the same commit at /build on any
+      # machine (README, "Reproducing a runtime wasm"). If it does not, either
+      # the remap in runtime/vitreus/build.rs or the mount above regressed.
       - name: Hash
+        working-directory: /build
         run: |
           set -euo pipefail
           name=$(echo "${{ matrix.runtime }}" | sed 's/-runtime//')
