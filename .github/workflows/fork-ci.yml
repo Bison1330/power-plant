@@ -71,6 +71,9 @@ jobs:
     name: ${{ matrix.runtime }} runtime wasm sha256
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    permissions:
+      contents: read
+      statuses: write
     strategy:
       fail-fast: false
       matrix:
@@ -117,6 +120,21 @@ jobs:
             echo "$sum  $(basename "$wasm")"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+          echo "WASM_SHA256=$sum" >> "$GITHUB_ENV"
+          echo "SPEC_VERSION=$spec" >> "$GITHUB_ENV"
+
+      # Job summaries, logs and artifacts are only readable with a GitHub
+      # session; a commit status is public API, so anyone can fetch the hash:
+      #   curl -s https://api.github.com/repos/<owner>/<repo>/commits/<sha>/statuses
+      - name: Publish hash as commit status
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+            -f state=success \
+            -f context="runtime-wasm/${{ matrix.runtime }}" \
+            -f description="spec ${SPEC_VERSION} sha256 ${WASM_SHA256}" \
+            -f target_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
 
       - uses: actions/upload-artifact@v4
         with:
