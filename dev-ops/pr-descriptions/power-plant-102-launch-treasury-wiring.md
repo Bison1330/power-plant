@@ -1,8 +1,10 @@
 # pallet-launch-treasury (testnet-runtime): runtime wiring
 
-*Draft, prepared 2026-09-21 on `pr/launch-treasury-wiring` (`dbbbd5e`, local, one
-commit on #100's `dba98a5`). Opens against `develop` once #100 merges; rebase and
-run the evidence first. Not posted.*
+*Draft, prepared 2026-09-21 on `pr/launch-treasury-wiring` (`eef4ab2`, local, one
+commit on #100's head `57cbe65`; rebased over the 84e69af tidy, which moved the
+testnet wiring into a `launchpad` module, and over 9beba3d, which puts launchpad
+calls on the flat custom fee — no interaction with this PR, see below). Opens
+against `develop` once #100 merges; rebase and run the evidence first. Not posted.*
 
 ## Mainnet effect: none
 
@@ -79,6 +81,14 @@ pallet_launch_treasury = 212` in `construct_runtime!`, and the benchmark list en
   fork's dev chain does; the public testnet has none, and a new pallet needs none.
 - `FundDexFeeEscrow`: the DEX-side counterpart of the vault funding (Finding 14).
   It belongs with the DEX wiring; if #100 lands without it, it can ride here.
+- A `RuntimeCall::LaunchTreasury(..)` arm in `CustomFee`. 9beba3d puts
+  `VitreusDex` and `Launchpad` calls on the flat custom fee (`base_fee ×
+  multiplier`, the same as a transfer); the treasury pallet's calls (`stake`,
+  `harvest`, `compound`, `retarget`, `retire`, …) stay on the default
+  weight-based fee, as every pallet not in that list does. Whether they belong
+  on the flat fee is a one-line follow-up for whoever owns the fee policy;
+  none of it touches the pallet's own accounting, which is a share of curve
+  and pool *trading* fees in VTRS, not the VNRG transaction fee.
 
 ## Evidence (to run after rebase, before opening)
 
