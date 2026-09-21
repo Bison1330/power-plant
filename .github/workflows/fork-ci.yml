@@ -104,9 +104,12 @@ jobs:
           sudo mount --bind "${RUSTUP_HOME:-$HOME/.rustup}" /rustup
           echo "RUSTUP_HOME=/rustup" >> "$GITHUB_ENV"
 
+      # rust-cache restores target/; the wasm build must start clean (README).
       - name: Build runtime
         working-directory: /build
-        run: cargo build --release --locked -p vitreus-power-plant-runtime --features ${{ matrix.runtime }}
+        run: |
+          rm -rf target/release/wbuild
+          cargo build --release --locked -p vitreus-power-plant-runtime --features ${{ matrix.runtime }}
 
       # This hash must equal a local build of the same commit made with the
       # README recipe on any machine. If it does not, either the remap in

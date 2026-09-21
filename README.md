@@ -130,6 +130,7 @@ sudo mkdir -p /build /rustup
 sudo mount --bind "$PWD" /build                            # or clone straight into /build
 sudo mount --bind "${RUSTUP_HOME:-$HOME/.rustup}" /rustup   # a symlink is not enough: rustc resolves it
 cd /build && git checkout <commit>
+rm -rf target/release/wbuild                               # always start the wasm build from a clean target
 RUSTUP_HOME=/rustup cargo build --release --locked -p vitreus-power-plant-runtime --features testnet-runtime   # or mainnet-runtime
 sha256sum target/release/wbuild/vitreus-power-plant-runtime/vitreus_power_plant_testnet_runtime.compact.compressed.wasm
 ```
@@ -147,6 +148,11 @@ Why the paths matter, and what this recipe removes:
   the checkout and the `-Zbuild-std` crates live under the rustup home, so
   both have to sit at the same path on every machine. `/build` is the
   `srtool` convention; `/rustup` is ours.
+
+The wasm target must be clean. The inner wasm profile links with
+`lto = "thin"`, and in testing a warm `target/release/wbuild` produced a
+different blob from a clean build of the same commit at the same paths;
+clean builds match each other and CI byte for byte.
 
 What still has to match: the toolchain (`rust-toolchain.toml`), the
 dependency set (`--locked`), and the feature. `$CARGO_HOME` may differ:
