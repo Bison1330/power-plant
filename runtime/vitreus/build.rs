@@ -21,9 +21,10 @@ fn main() {
     // so the rustup home is embedded too. Remap the workspace root, the cargo
     // home (registry + git checkouts) and the toolchain sysroot to fixed
     // names. This is necessary but not sufficient for a reproducible hash:
-    // cargo also hashes each workspace crate's absolute path into its
-    // `-C metadata`, which no flag can change, so the build must also run
-    // with the workspace at a fixed path (`/build`; see README,
+    // cargo also hashes each path crate's absolute path into its
+    // `-C metadata` — the workspace crates and the `-Zbuild-std` crates under
+    // the rustup home — which no flag can change, so the build must also run
+    // with the workspace at `/build` and `RUSTUP_HOME=/rustup` (README,
     // "Reproducing a runtime wasm").
     for (from, to) in remap_prefixes() {
         builder = builder.append_to_rust_flags(format!("--remap-path-prefix={from}={to}"));

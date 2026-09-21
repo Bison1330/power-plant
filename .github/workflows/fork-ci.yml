@@ -91,20 +91,26 @@ jobs:
         with:
           key: wasm-${{ matrix.runtime }}
 
-      # cargo hashes each workspace crate's absolute path into -C metadata,
-      # which changes symbol hashes and, through codegen, the code itself, so
-      # the runtime is only reproducible from a fixed path. /build is the
-      # srtool convention and what the README recipe uses.
-      - name: Mount workspace at /build
-        run: sudo mkdir -p /build && sudo mount --bind "$GITHUB_WORKSPACE" /build
+      # cargo hashes each path crate's absolute path into -C metadata, which
+      # changes symbol hashes and, through codegen, the code itself. The
+      # workspace crates live under the checkout and the -Zbuild-std crates
+      # under the rustup home, so both are mounted at fixed paths: /build
+      # (the srtool convention) and /rustup. README, "Reproducing a runtime
+      # wasm", is the same recipe for a local build.
+      - name: Mount workspace at /build and rustup home at /rustup
+        run: |
+          sudo mkdir -p /build /rustup
+          sudo mount --bind "$GITHUB_WORKSPACE" /build
+          sudo mount --bind "${RUSTUP_HOME:-$HOME/.rustup}" /rustup
+          echo "RUSTUP_HOME=/rustup" >> "$GITHUB_ENV"
 
       - name: Build runtime
         working-directory: /build
         run: cargo build --release --locked -p vitreus-power-plant-runtime --features ${{ matrix.runtime }}
 
-      # This hash must equal a local build of the same commit at /build on any
-      # machine (README, "Reproducing a runtime wasm"). If it does not, either
-      # the remap in runtime/vitreus/build.rs or the mount above regressed.
+      # This hash must equal a local build of the same commit made with the
+      # README recipe on any machine. If it does not, either the remap in
+      # runtime/vitreus/build.rs or the mounts above regressed.
       - name: Hash
         working-directory: /build
         run: |

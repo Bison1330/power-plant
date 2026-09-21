@@ -122,36 +122,45 @@ cargo build --release --features mainnet-native
 ### Reproducing a runtime wasm
 
 To verify that a deployed runtime matches the source, build only the runtime
-package at the tagged commit **with the workspace at `/build`** and compare
-hashes:
+package at the tagged commit with the workspace at **`/build`** and the rustup
+home at **`/rustup`**, and compare hashes:
 
 ```bash
-sudo mkdir -p /build && sudo mount --bind "$PWD" /build   # or clone straight into /build
+sudo mkdir -p /build /rustup
+sudo mount --bind "$PWD" /build                            # or clone straight into /build
+sudo mount --bind "${RUSTUP_HOME:-$HOME/.rustup}" /rustup   # a symlink is not enough: rustc resolves it
 cd /build && git checkout <commit>
-cargo build --release --locked -p vitreus-power-plant-runtime --features testnet-runtime   # or mainnet-runtime
+RUSTUP_HOME=/rustup cargo build --release --locked -p vitreus-power-plant-runtime --features testnet-runtime   # or mainnet-runtime
 sha256sum target/release/wbuild/vitreus-power-plant-runtime/vitreus_power_plant_testnet_runtime.compact.compressed.wasm
 ```
 
-Two things make the checkout location matter, and this recipe removes both:
+Why the paths matter, and what this recipe removes:
 
 - rustc embeds absolute source paths (panic locations) for every crate, and
   wasm-builder compiles `core`/`alloc` from source, so the rustup home is
   embedded too. `runtime/vitreus/build.rs` passes `--remap-path-prefix` for
   the workspace root, `$CARGO_HOME` and the toolchain sysroot, so those come
   out as `/power-plant/...`, `/cargo/...` and `/rustc-sysroot/...` everywhere.
-- cargo hashes each workspace crate's absolute path into its `-C metadata`.
-  That changes every symbol hash, and through LLVM's codegen the code and
-  data sections with them, so no flag can fix it: the workspace has to sit at
-  the same path. `/build` is the convention (it is what `srtool` uses).
+- cargo hashes each path crate's absolute path into its `-C metadata`. That
+  changes every symbol hash and, through LLVM's codegen, the code and data
+  sections with them, and no flag changes it. The workspace crates live under
+  the checkout and the `-Zbuild-std` crates live under the rustup home, so
+  both have to sit at the same path on every machine. `/build` is the
+  `srtool` convention; `/rustup` is ours.
 
 What still has to match: the toolchain (`rust-toolchain.toml`), the
-dependency set (`--locked`), and the feature. `$CARGO_HOME` and the rustup
-home may differ. The `runtime-wasm` job in `.github/workflows/fork-ci.yml`
-builds at `/build` and prints the hash for every commit in its job summary,
-so a reviewer can compare against CI instead of building.
+dependency set (`--locked`), and the feature. `$CARGO_HOME` may differ:
+registry and git sources are identified by URL, not path. The `runtime-wasm`
+job in `.github/workflows/fork-ci.yml` builds exactly this way and publishes
+the hash for every commit as a commit status, readable without a login:
+
+```bash
+curl -s https://api.github.com/repos/Bison1330/vitreusdex-pallet/commits/<sha>/statuses
+```
 
 Runtimes up to spec 225 were built before this; their committed hashes in
-`dev-ops/runtimes/` only reproduce from a checkout at `/root/power-plant`.
+`dev-ops/runtimes/` only reproduce from a checkout at `/root/power-plant`
+with the rustup home at `/root/.rustup`.
 
 ### Running Tests
 
