@@ -8,7 +8,8 @@ updated after posting.
 | --- | --- | --- |
 | `power-plant-100-dex-launchpad-wiring.md` | Vitreus-Foundation/power-plant #100 | open; still vendors the pallets, to be re-pointed at experimental `254ca48` |
 | `power-plant-101-bench-repairs.md` | Vitreus-Foundation/power-plant #101 | merged |
+| `power-plant-102-launch-treasury-wiring.md` | follow-up to #100 (number provisional) | draft on `pr/launch-treasury-wiring`; opens after #100 merges |
 | `experimental-1-dex-launchpad.md` | Vitreus-Foundation/power-plant-experimental #1 | merged as `254ca48` |
 | `experimental-1-comment-security-force-push.md` | comment on experimental #1 | posted |
-| `experimental-2-launch-treasury.md` | Vitreus-Foundation/power-plant-experimental #2 | open; rebased onto `254ca48` |
+| `experimental-2-launch-treasury.md` | Vitreus-Foundation/power-plant-experimental #2 | merged as `db128ab` |
 | `experimental-2-comment-security-force-push.md` | comment on experimental #2 | posted |
