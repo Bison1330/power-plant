@@ -1,10 +1,14 @@
 # Generating real weights for pallet-vitreus-dex, pallet-launchpad and pallet-launch-treasury
 
-The three pallets ship placeholder `weights.rs` files (the old hard-coded
-constants in the frame-weight-template layout; the treasury's are composed
-from the `energy-generation`, broker and DEX calls each extrinsic dispatches,
-LAUNCH_TREASURY_SPEC §10.8). This is the runbook for replacing them with
-measured weights. Do not run it on the development box:
+The pallets in this workspace ship `weights.rs` files in the
+frame-weight-template layout; the DEX's and the launchpad's are still the
+placeholder constants, the treasury's were measured on a `c-16` on
+2026-09-16 (its header says where and how). This is the runbook for
+replacing any of them with measured weights. It lives here, beside the
+pallets, because everything it checks — the benchmark counts, the function
+signatures, the storage each call touches — is a fact about these crates;
+the one thing it needs from elsewhere is a runtime that wires them, which
+§2 parameterises. Do not run it on the development box:
 2 vCPU shared with a live node produces numbers that are wrong by an unknown
 factor, and wrong weights are worse than placeholders because they look
 authoritative.
@@ -35,21 +39,65 @@ apt update && apt install -y build-essential clang libclang-dev llvm protobuf-co
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
 source "$HOME/.cargo/env"
 
-git clone git@github.com:Bison1330/vitreusdex-pallet.git power-plant   # or https
-cd power-plant
-git checkout design/launch-treasury              # or feature/solver-marketplace for the first two pallets only
-git rev-parse HEAD > /tmp/bench-commit           # record what was measured
+# The consuming runtime: whichever power-plant branch wires these pallets,
+# at the commit whose Cargo.lock pins the experimental SHA you are
+# measuring. Today that is the fork's `design/launch-treasury`
+# (git@github.com:Bison1330/power-plant.git); once #100 consumes a pinned
+# SHA it is the Foundation's branch that carries the pin. Never a branch
+# that vendors its own copy of a pallet — the weights would describe code
+# this repo does not have.
+git clone <consumer> power-plant && cd power-plant
+git checkout <branch>
+git rev-parse HEAD > /tmp/bench-commit           # the consumer commit measured
+grep -A1 'pallet-launch-treasury' Cargo.lock | grep -o 'rev=[0-9a-f]*' | head -1 >> /tmp/bench-commit   # the pallet SHA measured
 rustup show                                       # picks up rust-toolchain.toml (1.83 + wasm32)
 
-# The launchpad and the treasury are testnet-only, so the benchmarking node
-# must carry the testnet native runtime. All three pallets are measured from
-# this one binary.
+# These pallets are testnet-only, so the benchmarking node must carry the
+# testnet native runtime. All three are measured from this one binary.
 cargo build --release --locked --features testnet-native,runtime-benchmarks
 ls -la target/release/vitreus-power-plant-node
 ```
 
 `--locked` matters: the checked-in `Cargo.lock` is what the runtime was
-verified against.
+verified against, and it is what names the experimental SHA the weights
+belong to.
+
+### 2.1 The runtime's two benchmark lists — read this before rebasing
+
+The runtime defines its benchmark set twice, one `mod benches` per network
+feature (`runtime/vitreus/src/lib.rs`, the two `define_benchmarks!` blocks
+near the end). Upstream `bench/repairs` (daa14f2) gates them explicitly:
+
+```rust
+#[cfg(all(feature = "runtime-benchmarks", feature = "mainnet-runtime"))]
+mod benches { define_benchmarks!( [frame_system, …] [pallet_evm, EVM] [pallet_treasury_extension, …] ); }
+
+#[cfg(all(feature = "runtime-benchmarks", feature = "testnet-runtime"))]
+mod benches { define_benchmarks!( …the same three… ); }
+```
+
+Upstream the two lists are identical, so which block a build takes does
+not matter and the commit that changed the gates was safe. **The wiring
+for these pallets is exactly what makes them diverge**: the fork adds
+`[pallet_vitreus_dex, VitreusDex]`, `[pallet_launchpad, Launchpad]` and
+`[pallet_launch_treasury, LaunchTreasury]` to the testnet block only,
+because the pallets are not in the mainnet runtime. Three things follow
+for whoever rebases that wiring onto `bench/repairs` or its descendants:
+
+- The three entries go in the `testnet-runtime` block and nowhere else. A
+  merge that lands them in the `mainnet-runtime` block fails to compile
+  (no `VitreusDex` in that runtime) — good, it is loud. A merge that
+  drops them from the testnet block compiles and silently benchmarks
+  nothing: §3's count is the check.
+- The fork's gates were `testnet-runtime` / `not(testnet-runtime)`;
+  upstream's are `testnet-runtime` / `mainnet-runtime`. Take upstream's.
+  The difference is only that a build with *neither* network feature no
+  longer has a `benches` module at all (`list_benchmarks!` will not
+  resolve); that configuration also gets no wasm binary (lib.rs, the two
+  `include!` lines at the top), so nothing runs it.
+- `benchmark pallet` measures whatever list the binary was built with.
+  If §3 shows fewer than 39 lines for the three pallets, the block is
+  wrong, not the pallets.
 
 ## 3. Sanity: the benchmark list
 
@@ -60,15 +108,15 @@ verified against.
 
 Expect 20 lines for `pallet_vitreus_dex` (create_pool … set_solver_bond_amount,
 then set_default_fee_routing, set_protocol_fee_recipient,
-claim_pool_creator_fees, withdraw_protocol_fees) and 11 for
+claim_pool_creator_fees, withdraw_protocol_fees), 11 for
 `pallet_launchpad` (create_launch, buy, buy_crossing, sell, graduate,
 claim_creator_fees, set_creator_fee_recipient, set_params,
 set_creation_paused, force_seed_into_existing_pool, set_launch_metadata —
 ten calls plus `buy_crossing`, the crossing branch of `buy`) and 8 for
 `pallet_launch_treasury` (stake, retarget, harvest, compound, retire,
-finalize_retirement, set_terms, set_targets — one per call). If any pallet
-is missing, the binary was built without `testnet-native` or without
-`runtime-benchmarks`.
+finalize_retirement, set_terms, set_targets): 39 in all. If a pallet is
+missing, the binary was built without `testnet-native` or without
+`runtime-benchmarks`, or its entry fell out of the testnet block (§2.1).
 
 ## 4. Score the machine
 
@@ -87,7 +135,10 @@ goes back with the weights.
 
 ```bash
 COMMON="--chain dev --wasm-execution compiled --steps 50 --repeat 20 --heap-pages 4096 \
-        --template .maintain/frame-weight-template.hbs"
+        --template <experimental>/.maintain/frame-weight-template.hbs"
+# The template is this repo's (.maintain/); power-plant carries an
+# identical copy on bench/repairs. Either produces committed-shape output;
+# if they ever differ, this repo's is the one the pallets' headers match.
 
 ./target/release/vitreus-power-plant-node benchmark pallet $COMMON \
   --pallet pallet_vitreus_dex --extrinsic '*' \
@@ -105,23 +156,23 @@ COMMON="--chain dev --wasm-execution compiled --steps 50 --repeat 20 --heap-page
   --json-file /tmp/bench-launch-treasury.json 2>&1 | tee /tmp/bench-launch-treasury.log
 ```
 
-The treasury's benchmarks stand up real `energy-generation` validators
-(bond + validate, reputation set by root) and drive the real broker and
-DEX, so they take longer per step than the other two: `finalize_retirement`
-creates and retires up to `MaxUnlockingChunks` (64) launches per step.
-Budget another 20–40 minutes for it.
+`--output` paths are the pallet crates in *this* repo, wherever cargo put
+them for the consumer build (`~/.cargo/git/checkouts/power-plant-experimental-*/<sha>/pallets/…`
+is read-only; write to a clone of this repo and commit here).
 
 `--steps 50 --repeat 20` is the Polkadot convention: 50 points per linear
-component (`create_launch` has four, `set_launch_metadata` two), 20 repeats
-each. Together the two runs take on the order of 20–40 minutes on `c-16`.
-`--output` overwrites the placeholder file in place; the template writes
+component (`create_launch` has four, `set_launch_metadata` two, the
+treasury's `finalize_retirement` one on the matured chunk count), 20
+repeats each. Together the three runs take on the order of 30–50 minutes
+on `c-16`. `--output` overwrites the file in place; the template writes
 the same `WeightInfo` trait, `SubstrateWeight<T>` and `()` impls the
-placeholders have, so nothing else in the crate changes.
+existing files have, so nothing else in the crate changes.
 
-Optional, same session, and recommended by LAUNCHPAD_SPEC §8.2: every
-other pallet's weights were generated under the old `AssetId = u32`
-switch and measured a narrower type than production. Regenerating them is
-the same command per pallet; it is a separate commit.
+Optional, same session, and recommended by LAUNCHPAD_SPEC §8.2: the
+consumer's other pallets' weights were generated under the old
+`AssetId = u32` switch and measured a narrower type than production.
+Regenerating them is the same command per pallet, with `--output` in the
+consumer; it is a separate commit there.
 
 ## 6. Verify before committing
 
@@ -131,17 +182,18 @@ On the droplet, all of these must pass:
 # 1. The generated files compile and every test still passes. Tests that
 #    reason about weights (`weights_crossing_buy_refunds_when_not_crossing`)
 #    use `<() as WeightInfo>` and are unaffected by the numbers.
-cargo test -p pallet-vitreus-dex -p pallet-launchpad -p pallet-launch-treasury
-cargo test -p pallet-vitreus-dex -p pallet-launchpad -p pallet-launch-treasury --features runtime-benchmarks
+# In this repo:
+cargo test --workspace --locked
+cargo test --workspace --locked --features runtime-benchmarks
+# In the consumer, with Cargo.lock pointed at the commit that carries the new weights:
 cargo check -p vitreus-power-plant-runtime --features testnet-runtime,runtime-benchmarks
 cargo check -p vitreus-power-plant-runtime --features mainnet-runtime
 
 # 2. Every function is present with the right signature.
-grep -c 'fn .*-> Weight' pallets/vitreus-dex/src/weights.rs   # 20 in the trait
+grep -c 'fn .*-> Weight' pallets/vitreus-dex/src/weights.rs        # 60: 20 in the trait and both impls
+grep -c 'fn .*-> Weight' pallets/launch-treasury/src/weights.rs    # 24: 8 × 3
 grep -n 'fn create_launch(n: u32, s: u32, d: u32, u: u32)\|fn set_launch_metadata(d: u32, u: u32)' \
   pallets/launchpad/src/weights.rs
-grep -c 'fn .*-> Weight' pallets/launch-treasury/src/weights.rs   # 8 in the trait
-grep -n 'fn finalize_retirement(n: u32)' pallets/launch-treasury/src/weights.rs
 ```
 
 Then read the numbers, not just the diff:
@@ -152,7 +204,10 @@ Then read the numbers, not just the diff:
   `buy_crossing()` less a plain buy; `create_launch` at maximum components
   > at minimum; `swap_exact_tokens_for_tokens` (measured on the routed
   branch: three transfers, two counters) > `lock_liquidity()`;
-  `set_launch_metadata` grows with `d` and `u`.
+  `set_launch_metadata` grows with `d` and `u`. Treasury: `stake`,
+  `retarget` and `retire` each contain a `cooperate` over the full target
+  list, so all three > `harvest`; `compound` > `harvest` (it harvests,
+  then sells and buys); `finalize_retirement` grows with `n`.
 - **Components are sane:** the per-byte slopes on `n`, `s`, `d`, `u` should
   be small positive numbers (storage write cost per byte), not large or
   negative. A negative slope means noise dominated — re-run that pallet
@@ -164,29 +219,6 @@ Then read the numbers, not just the diff:
   written plus two `System::Account` writes. If a call's list is missing a
   storage item you know it touches, the benchmark setup took a cheaper
   branch than intended.
-- **Treasury ordering holds:** `stake() > retarget()` (a `bond_extra` and
-  a harvest on top of the same `cooperate(16)`); `set_targets() ≈
-  retarget()` plus one write; `retire() > retarget()` (an `unbond` plus the
-  re-cooperate); `retire()` and `compound()` are the two largest and
-  within a few percent of each other — `retire` on storage (71 reads,
-  the re-cooperate over 16 targets), `compound` on execution (a broker
-  swap, a DEX swap, a burn, two bounty transfers) — and which one leads
-  is machine-dependent (the dev box had `compound` ahead by 3.5 %, c-16
-  had `retire` ahead by 3.6 %); `finalize_retirement(n)` has a positive
-  slope on `n` of roughly one `Treasuries` read + write per entry.
-  Measured 2026-09-16 at `f768be5`: stake 594.7 µs, retarget 464.6,
-  harvest 42.7, compound 652.7, retire 676.7, finalize 130.2 + 9.96·n,
-  set_terms 8.6, set_targets 437.8 — 2.1–3.6× the composed placeholders,
-  all in the conservative direction. Note `retarget` is `cooperate(16)`
-  plus ~10 µs, so it says `cooperate(16)` costs ~455 µs on that box
-  against the ~119 µs `energy-generation`'s own weights claim: their
-  weights are lighter than this hardware measures, which is where the
-  memory-bandwidth caveat shows up. `stake`'s storage list must include `EnergyGeneration::Ledger`,
-  `Cooperators`, `Validators` (× 16) and `Reputation::AccountReputation`;
-  `compound`'s must include the broker's account, `VitreusDex::Pools`,
-  `LastSwapBlock` and the launch asset's `Assets::Asset` (the burn). If
-  `compound` shows no `Assets::Account` write for the broker, the sale did
-  not run and the benchmark measured the burn alone.
 - **Magnitude vs placeholders:** placeholders are in the 10^7–10^8 ref_time
   range. Measured values 2–10× off in either direction are normal; 100× off
   is a benchmark that measured the wrong thing.
@@ -199,21 +231,26 @@ Copy to the repo on the box you commit from:
 pallets/vitreus-dex/src/weights.rs
 pallets/launchpad/src/weights.rs
 pallets/launch-treasury/src/weights.rs
-/tmp/benchmark-machine.txt      -> dev-ops/benchmarks/<date>-machine.txt
-/tmp/bench-*.json               -> dev-ops/benchmarks/<date>-*.json
+/tmp/benchmark-machine.txt      -> kept with the raw output (see below)
+/tmp/bench-*.json               -> kept with the raw output; hundreds of
+                                   thousands of lines, so not in this repo
 /tmp/bench-*.log                -> keep locally; not committed
 /tmp/bench-commit               -> goes in the commit message
 ```
 
-One commit for the two DEX/launchpad files plus the machine score and JSON
-(they are the provenance), titled along the lines of
-`Weights: measured pallet-vitreus-dex and pallet-launchpad on c-16 (<commit>)`,
-with the droplet size, the `benchmark machine` summary line, steps/repeat,
-and the measured commit in the body. Regenerated weights for other pallets
-are a second commit. Then LAUNCHPAD_SPEC §8.2 item 3 moves to §8.1.
+The raw `benchmark pallet` JSON and the `benchmark machine` output are the
+provenance for a weights.rs; keep them where the PR that ships the weights
+can link to them (the contributor's fork, a gist, or a release asset). The
+commit that ships weights states the machine, its `benchmark machine`
+summary line, steps/repeat, and both lines of `/tmp/bench-commit` — the
+consumer commit and the pallet SHA it pinned — in its body; each
+weights.rs already carries the per-extrinsic statistics in its header.
+The commit lands in this repo; the consumer then bumps its pin.
+Regenerated weights for the consumer's other pallets are a commit there,
+not here.
 
-After it lands: the runtime's `spec_version` must be bumped for the weights
-to reach a live chain (weights are compiled into the runtime), and
-`benchmark overhead` (block and extrinsic base weights, in
+After it lands: the consumer's `spec_version` must be bumped for the
+weights to reach a live chain (weights are compiled into the runtime), and
+`benchmark overhead` (block and extrinsic base weights, in the consumer's
 `runtime/vitreus/src/weights/`) is a separate exercise on the same hardware
 if those were never measured either.
