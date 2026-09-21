@@ -1,8 +1,8 @@
 # pallet-launch-treasury (testnet-runtime): runtime wiring
 
-*Draft, prepared 2026-09-21 on `pr/launch-treasury-wiring` (`dfcd4c2`, local). Opens
-against `develop` once #100 merges; rebase and re-run the evidence first. Not
-posted.*
+*Draft, prepared 2026-09-21 on `pr/launch-treasury-wiring` (`dbbbd5e`, local, one
+commit on #100's `dba98a5`). Opens against `develop` once #100 merges; rebase and
+run the evidence first. Not posted.*
 
 ## Mainnet effect: none
 
@@ -20,13 +20,33 @@ in-code one.
 ## What it depends on
 
 `pallet-launch-treasury` is consumed from `Vitreus-Foundation/power-plant-experimental`
-by commit, pinned at **`db128ab`** (`main` after experimental #2). It depends on
-`pallet-vitreus-dex` and `pallet-launchpad` from the same repository, so the three
-pins must be one rev: two revs would be two copies of each crate and the runtime
-would not type-check. #100 pins the DEX and the launchpad; if it pins `254ca48`
-(`main` after #1), this PR moves the pin to `db128ab`. The DEX and launchpad
-sources are identical at the two commits (#2 added only the treasury crate, its
-spec, the runbook and the workspace entries), so the move changes nothing in them.
+by commit, pinned at **`db128ab`** (`main` after experimental #2) — the same rev #100
+pins for `pallet-vitreus-dex` and `pallet-launchpad`. It has to be the same rev: the
+treasury crate depends on both, and two revs would be two copies of each. `Cargo.lock`
+gains that one package; polkadot-sdk stays at `7642d6b`.
+
+## What this changes in #100's wiring, not just adds
+
+Three of #100's values are replaced, and a reviewer should see that here rather than
+in the diff:
+
+| | #100 | This PR |
+| --- | --- | --- |
+| `pallet_vitreus_dex::Config::TreasurySink` | `()` — the treasury slice folds into the protocol share | `LaunchTreasury` |
+| `pallet_launchpad::Config::CurveTreasurySink` | `()` | `LaunchTreasury` |
+| Curve fee split, `protocol_share_bps` / `treasury_share_bps` (both `LaunchParams` literals) | 5,000 / 0 | 2,500 / 2,500 |
+
+Why 2,500 / 2,500: the curve fee is 100 bps, split creator / protocol / treasury. The
+treasury's quarter comes out of the protocol's half; the creator's 50% is untouched, so
+no launch creator's terms change. It is the split the dev chain has run since runtime
+221 (LAUNCH_TREASURY_SPEC §2.6), and it satisfies the launchpad's own bound
+(`protocol + treasury ≥ 50%` of the fee, `validate_params`). The pool-side routing
+(`set_default_fee_routing`) is not touched by this PR: it is storage, set by governance
+after the upgrade, and `PoolInfo.routing` is snapshotted per pool at seed.
+
+The two placeholders and the 0 were the right values for #100 on its own — with no
+treasury pallet there is nowhere for the slice to go — and this PR is the point at
+which there is.
 
 ## What the runtime provides
 
@@ -46,11 +66,8 @@ consumer's side is reviewable in one place):
   not withheld (spec §9.6). Idempotent (`providers > 0` short-circuits); it is a
   funding step, not a storage migration.
 
-And in `lib.rs`, the connections: `type TreasurySink = LaunchTreasury` on the DEX
-(testnet) and `type CurveTreasurySink = LaunchTreasury` on the launchpad;
-`LaunchTreasury: pallet_launch_treasury = 59` in `construct_runtime!`; the
-benchmark list entry; and the curve fee split creator 50 / protocol 25 /
-treasury 25 (`LAUNCH_TREASURY_SPEC §2.6`). Index 59 is free on the live testnet.
+And in `lib.rs`: the three replacements in the table above, `LaunchTreasury:
+pallet_launch_treasury = 212` in `construct_runtime!`, and the benchmark list entry. Index 212 is the next slot in the 210–219 block #100 reserves for these pallets (VitreusDex 210, Launchpad 211).
 
 ## What is deliberately not here
 
@@ -65,10 +82,11 @@ treasury 25 (`LAUNCH_TREASURY_SPEC §2.6`). Index 59 is free on the live testnet
 
 ## Evidence (to run after rebase, before opening)
 
-- `cargo check -p vitreus-power-plant-runtime --features testnet-runtime`, and
-  with `runtime-benchmarks` and `try-runtime`; the node build and workspace tests.
+- Done on `dbbbd5e`: `cargo check -p vitreus-power-plant-runtime --features
+  testnet-runtime --locked` passes against the pinned crates. Still to run: the
+  `runtime-benchmarks` and `try-runtime` checks, the node build, workspace tests.
 - `subwasm diff` mainnet and testnet, `develop` → branch. Expected: mainnet no
-  change; testnet `[+] id: 59 - new pallet: LaunchTreasury`, nothing else.
+  change; testnet `[+] id: 212 - new pallet: LaunchTreasury`, nothing else.
 - `try-runtime on-runtime-upgrade live` against the public testnet: succeeds,
   idempotent, `FundLaunchTreasuryVault` transfers exactly one ED.
 - A chopsticks fork of the public testnet with the wasm override: a launch
