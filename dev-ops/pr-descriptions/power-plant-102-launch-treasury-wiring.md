@@ -1,10 +1,11 @@
 # pallet-launch-treasury (testnet-runtime): runtime wiring
 
-*Draft, prepared 2026-09-21 on `pr/launch-treasury-wiring` (`eef4ab2`, local, one
-commit on #100's head `57cbe65`; rebased over the 84e69af tidy, which moved the
-testnet wiring into a `launchpad` module, and over 9beba3d, which puts launchpad
-calls on the flat custom fee — no interaction with this PR, see below). Opens
-against `develop` once #100 merges; rebase and run the evidence first. Not posted.*
+*Prepared 2026-09-21, rebased onto merged `develop` (`8aba9b6`) on 2026-09-22 as
+`6f4d4a0` — one commit, pushed to `Bison1330/power-plant`. #100 was squash-merged,
+so this was replayed with `--onto` rather than onto its old base; the 84e69af tidy
+(which moved the testnet wiring into a `launchpad` module) and 9beba3d (launchpad
+calls on the flat custom fee — no interaction with this PR) are both absorbed.
+Evidence below was run against this commit.*
 
 ## Mainnet effect: none
 
@@ -90,7 +91,38 @@ pallet_launch_treasury = 212` in `construct_runtime!`, and the benchmark list en
   none of it touches the pallet's own accounting, which is a share of curve
   and pool *trading* fees in VTRS, not the VNRG transaction fee.
 
-## Evidence (to run after rebase, before opening)
+## Evidence (run 2026-09-22 against `6f4d4a0`)
+
+| Check | Result |
+|---|---|
+| `cargo metadata --locked`, `cargo +nightly fmt -- --check` | pass |
+| `cargo clippy --locked -p vitreus-power-plant-runtime --features testnet-runtime -- -D warnings` | pass |
+| `cargo check --locked -p vitreus-power-plant-runtime` — `testnet-runtime`, `mainnet-runtime` | pass |
+| `cargo check --locked -p vitreus-power-plant-node` — `testnet-native`, `mainnet-native` | pass (the check that caught the 9c14dcf genesis break) |
+| `runtime-benchmarks` build (testnet) | pass |
+| `try-runtime` feature build — testnet, mainnet | pass |
+| Pallet suites at the pinned `db128ab` — vitreus-dex / launchpad / launch-treasury | 108 / 44 / 40, all green |
+| `subwasm diff` **mainnet** (develop → branch) | **No change detected.** Compatible, no `transaction_version` bump |
+| `subwasm diff` **testnet** (develop → branch) | **`[+] id: 212 - new pallet: LaunchTreasury`**, Compatible, no `transaction_version` bump; plus two four-byte changes in pallet 211 `DefaultLaunchParams` and its storage default (offsets 18–21) — `protocol_share_bps` 5000 → 2500 and `treasury_share_bps` 0 → 2500, `0x1388` → `0x09C4` little-endian, i.e. the three replaced values in the table above and nothing else |
+| `try-runtime on-runtime-upgrade --checks all` vs **mainnet** (`wss://rpc-mainnet.vtrs.io`, spec 213) | pass — migrations idempotent, every pallet's `try_state` green |
+| `try-runtime on-runtime-upgrade --checks all` vs **testnet** (`wss://rpc.testnet.compliq.io:9945`, spec 213) | pass — `🐥 New pallet "LaunchTreasury" detected … initializing the on-chain storage version`, migrations idempotent, `try_state` green for `VitreusDex`, `Launchpad`, `LaunchTreasury` among the rest |
+
+Both `try-runtime` runs use `--disable-spec-version-check`: this PR leaves
+`spec_version` to the Foundation, so the branch carries the same 213 both chains
+run and the guard refuses before executing anything. Runtime blobs for the diffs
+are built without `try-runtime` (what would actually be deployed); the two runs
+use separate builds with the feature compiled in.
+
+Release blobs, built under the reproducible recipe (workspace bind-mounted at
+`/build`, `RUSTUP_HOME=/rustup`, clean `wbuild`):
+
+| Blob | sha256 (first 16) | bytes |
+|---|---|---|
+| branch testnet-runtime | `cb3b5a093fd08c7b…` | 2,326,594 |
+| branch mainnet-runtime | `e2ec21503d1e2ad1…` | 2,230,851 |
+| develop testnet-runtime | `b5820ba86884ab97…` | 2,293,922 |
+
+## Original evidence checklist
 
 - Done on `dbbbd5e`: `cargo check -p vitreus-power-plant-runtime --features
   testnet-runtime --locked` passes against the pinned crates. Still to run: the
