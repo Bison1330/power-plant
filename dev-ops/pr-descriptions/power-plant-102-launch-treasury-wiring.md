@@ -1,7 +1,9 @@
 # pallet-launch-treasury (testnet-runtime): runtime wiring
 
 *Prepared 2026-09-21, rebased onto merged `develop` (`8aba9b6`) on 2026-09-22 as
-`6f4d4a0` — one commit, pushed to `Bison1330/power-plant`. #100 was squash-merged,
+`6f4d4a0`, plus `e7f865d` adding the CHANGELOG line — two commits, pushed to
+`Bison1330/power-plant`. The evidence below ran against `6f4d4a0`; the second
+commit touches `CHANGELOG.md` only and does not enter the runtime blob. #100 was squash-merged,
 so this was replayed with `--onto` rather than onto its old base; the 84e69af tidy
 (which moved the testnet wiring into a `launchpad` module) and 9beba3d (launchpad
 calls on the flat custom fee — no interaction with this PR) are both absorbed.
@@ -71,6 +73,14 @@ consumer's side is reviewable in one place):
 
 And in `lib.rs`: the three replacements in the table above, `LaunchTreasury:
 pallet_launch_treasury = 212` in `construct_runtime!`, and the benchmark list entry. Index 212 is the next slot in the 210–219 block #100 reserves for these pallets (VitreusDex 210, Launchpad 211).
+
+## CHANGELOG
+
+`- Add \`pallet-launch-treasury\` on testnet` under `### Added`, the same form as
+#100's two entries, which are what `develop` carries. **Leave "Does not require a
+CHANGELOG entry" unchecked.** The line 57cbe65 removed from #100 was #101's
+benchmark fix, split into its own PR — not a sign that the repo skips the
+changelog for a pallet.
 
 ## What is deliberately not here
 
