@@ -1323,8 +1323,8 @@ impl pallet_vitreus_dex::BenchmarkHelper<NativeOrAssetId, AccountId> for DexBenc
 // The launchpad creates launch tokens through `fungibles::Create`, the force
 // path of pallet_assets that does not consult `CreateOrigin`. Under
 // testnet-runtime `CreateOrigin` is `EnsureSigned`, so nothing is circumvented;
-// under mainnet-runtime it is `EnsureNever` — the Foundation's decision that
-// there is no permissionless asset creation — and the launchpad is not wired.
+// under mainnet-runtime it is `EnsureNever` — mainnet has no permissionless
+// asset creation — and the launchpad is not wired.
 
 #[cfg(feature = "testnet-runtime")]
 parameter_types! {
